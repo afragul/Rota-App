@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query , status ,HTTPException
 from typing import Annotated
-from app.services.weather import get_current_weather
+from app.services.weather import get_current_weather ,WeatherServiceError
 from app.schemas.weather import CurrentWeather
 
 router = APIRouter(
@@ -13,7 +13,13 @@ async def get_weather(
         latitude: Annotated[float, Query(ge=-90, le=90)],  # enlem sinirlari
         longitude: Annotated[float, Query(ge=-180, le=180)],  # boylam sinirlari
 ) -> CurrentWeather:
-    return await get_current_weather(latitude=latitude, longitude=longitude)
+    try:
+        return await get_current_weather(latitude=latitude, longitude=longitude)
+    except WeatherServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
 
 
 
