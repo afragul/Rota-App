@@ -2,7 +2,7 @@ import httpx
 
 from app.schemas.weather import CurrentWeather
 
-OPEN_METEO_URL = "https://api.open-meteo.com/v1/BOZUK"
+OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 
 class WeatherServiceError(Exception):
     """Hava durumu servisine ulaşılamadı veya cevap anlaşılamadı."""
