@@ -4,8 +4,10 @@ from app.schemas.weather import CurrentWeather
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 
+
 class WeatherServiceError(Exception):
     """Hava durumu servisine ulaşılamadı veya cevap anlaşılamadı."""
+
 
 WEATHER_CODES = {
     0: "açık",
@@ -28,6 +30,7 @@ WEATHER_CODES = {
     82: "kuvvetli sağanak",
     95: "gök gürültülü fırtına",
 }
+
 
 async def _fetch_raw(latitude: float, longitude: float) -> dict:
     params = {
@@ -68,4 +71,3 @@ async def get_current_weather(latitude: float, longitude: float) -> CurrentWeath
         )
     except (KeyError, TypeError) as exc:
         raise WeatherServiceError("Hava durumu cevabı beklenen formatta değil") from exc
-

@@ -1,6 +1,5 @@
-from typing import Annotated
-
 from pydantic import BaseModel
+
 
 class CurrentWeather(BaseModel):
     latitude: float
@@ -9,4 +8,3 @@ class CurrentWeather(BaseModel):
     temperature: float
     condition: str
     code: int
-

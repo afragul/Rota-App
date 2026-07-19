@@ -1,11 +1,12 @@
-import logging
 from logging.config import dictConfig
 
 LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 
-def setup_logger(level : str = 'INFO')-> None:
-    dictConfig({
-        "version": 1,
+
+def setup_logger(level: str = "INFO") -> None:
+    dictConfig(
+        {
+            "version": 1,
             "disable_existing_loggers": False,  # uvicorn loglarini susturma
             "formatters": {
                 "default": {
@@ -23,4 +24,5 @@ def setup_logger(level : str = 'INFO')-> None:
                 "handlers": ["console"],
                 "level": level,
             },
-    })
+        }
+    )

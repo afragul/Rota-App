@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # Google Places (New) taban adresi
     google_places_base_url: str = "https://places.googleapis.com/v1"
 
+    # --- LLM ---
+    gemini_api_key: SecretStr
+    gemini_model: str = "gemini-2.5-flash"
+
     # Tüm dış çağrılar için ortak zaman aşımı (saniye)
     http_timeout: float = 10.0
 

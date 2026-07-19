@@ -19,12 +19,8 @@ async def get_nearby_places(
         list[str],
         Query(description="Mekân türleri, örn: cafe, restaurant, museum"),
     ],
-    radius: Annotated[
-        float, Query(gt=0, le=50_000, description="Arama yarıçapı (metre)")
-    ] = 1500.0,
-    max_results: Annotated[
-        int, Query(ge=1, le=20, description="Maksimum sonuç sayısı")
-    ] = 10,
+    radius: Annotated[float, Query(gt=0, le=50_000, description="Arama yarıçapı (metre)")] = 1500.0,
+    max_results: Annotated[int, Query(ge=1, le=20, description="Maksimum sonuç sayısı")] = 10,
 ) -> list[Place]:
     """Verilen koordinatın çevresindeki mekânları döndürür."""
     try:
