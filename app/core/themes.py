@@ -11,6 +11,10 @@ THEME_TYPES: dict[str, list[str]] = {
 
 DEFAULT_THEMES = ["yemek", "kafe", "tarihi"]
 
+# Sadece açık havada anlamlı temalar. Diğerleri ("tarihi", "eglence" gibi) hem
+# indoor hem outdoor mekan türü barındırdığı için karma kabul edilir, elenmez.
+OUTDOOR_ONLY_THEMES = {"acik_hava"}
+
 
 def types_for(themes: list[str]) -> list[str]:
     """Tema listesini tekrarsız Google tür listesine çevirir."""
@@ -20,3 +24,14 @@ def types_for(themes: list[str]) -> list[str]:
             if t not in result:
                 result.append(t)
     return result
+
+
+def filter_for_bad_weather(themes: list[str]) -> list[str]:
+    """Kötü havada sadece açık havada anlamlı temaları eler.
+
+    Eleme sonucu liste tamamen boşalırsa (ör. kullanıcı yalnızca "acik_hava"
+    seçmiş), kullanıcının açık seçimini ezmemek için orijinal listeyi
+    olduğu gibi döneriz.
+    """
+    filtered = [t for t in themes if t not in OUTDOOR_ONLY_THEMES]
+    return filtered or themes

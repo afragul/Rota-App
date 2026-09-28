@@ -5,9 +5,9 @@ Backend önce tamamlanıp sonra frontend'e geçilecek şekilde sıralandı. READ
 ## Milestone 1 — Backend'i tamamla
 
 - [x] **Şehir/adres → koordinat çözümleme**: `/plan` artık `latitude`/`longitude` ikilisi yerine `city` de kabul ediyor (`app/services/geocoding.py`, Google Geocoding API). `MAPS_API_KEY` bunun için kullanılmaya başlandı. Bağımsız test için `GET /geocode` eklendi.
-- [ ] **Hava durumuna göre kural bazlı indoor/outdoor ağırlıklandırma**: Şu an hava durumu sadece metin olarak LLM'e veriliyor, karar tamamen modele bırakılmış. `orchestrator.py` ya da `planner.py` seviyesinde açık bir kural eklenmeli (ör. yağmur/kar kodlarında tema havuzu otomatik olarak indoor ağırlıklı türlere daraltılsın).
+- [x] **Hava durumuna göre kural bazlı indoor/outdoor ağırlıklandırma**: `app/services/weather.py::is_bad_weather` yağış/fırtına kodlarını işaretliyor, `app/core/themes.py::filter_for_bad_weather` kötü havada `acik_hava` temasını mekan aramasından önce eliyor (`orchestrator.py::build_day_plan`). Not: bu artık hava sonucunun mekan aramasından önce beklenmesini gerektiriyor — hava/mekan paralel çekimi kayboldu, tema çözümleme (LLM) ile hava paralel kaldı. Ayrıca `_weather_summary`'deki `weather.description` (var olmayan alan) hatası `weather.condition` olarak düzeltildi.
 - [ ] **Rota/harita verisi**: Planlanan duraklar arasında mesafe/süre/rota (ör. Google Directions API) üretilip `PlanStop`'a veya `DayPlan`'a eklenmeli, frontend'in haritada çizgi çizebilmesi için.
-- [ ] **Eksik test kapsamı**: `weather.py`, `planner.py`, `orchestrator.py` için hiç test yok (sadece `places.py` test edilmiş). En azından hata yollarını (Groq çağrısı başarısız, şema uymuyor, hava alınamıyor) kapsayan testler eklenmeli.
+- [ ] **Eksik test kapsamı**: `planner.py` ve `build_day_plan`'ın uçtan uca akışı hâlâ test edilmiyor (sadece `places.py`, `geocoding.py` ve yeni eklenen saf fonksiyonlar — `is_bad_weather`, `filter_for_bad_weather` — test edilmiş). En azından Groq çağrısı başarısız/şema uymuyor durumları ve `orchestrator.py`'nin uçtan uca akışı kapsanmalı.
 - [ ] **`.env.example` doldurulması**: Şu an boş dosya; `PLACES_API_KEY`, `MAPS_API_KEY`, `GROQ_API_KEY`, `GROQ_MODEL` için placeholder değerlerle doldurulmalı ki yeni katkıda bulunan biri (veya arkadaşın) hızlı kurulum yapabilsin.
 
 ## Milestone 2 — AI'nin soru sorabilmesi

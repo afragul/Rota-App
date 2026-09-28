@@ -31,6 +31,14 @@ WEATHER_CODES = {
     95: "gök gürültülü fırtına",
 }
 
+# Yağış/fırtına kodları: indoor ağırlıklı öneri kararı bu sette karar verilir.
+BAD_WEATHER_CODES = {51, 53, 55, 61, 63, 65, 71, 73, 75, 80, 81, 82, 95}
+
+
+def is_bad_weather(code: int) -> bool:
+    """Kod yağış/fırtına ile ilişkiliyse True döner."""
+    return code in BAD_WEATHER_CODES
+
 
 async def _fetch_raw(latitude: float, longitude: float) -> dict:
     params = {

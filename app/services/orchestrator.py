@@ -1,13 +1,14 @@
 import asyncio
 import logging
+from dataclasses import dataclass
 
-from app.core.themes import DEFAULT_THEMES, types_for
+from app.core.themes import DEFAULT_THEMES, filter_for_bad_weather, types_for
 from app.schemas.places import Place
 from app.schemas.plan import DayPlan, PlanRequest
 from app.services.geocoding import geocode_address
 from app.services.places import PlacesServiceError, search_nearby
 from app.services.planner import create_plan, resolve_themes
-from app.services.weather import WeatherServiceError, get_current_weather
+from app.services.weather import WeatherServiceError, get_current_weather, is_bad_weather
 
 logger = logging.getLogger(__name__)
 
@@ -55,35 +56,59 @@ async def _gather_places(latitude: float, longitude: float, themes: list[str]) -
     return pool[:MAX_POOL_SIZE]
 
 
-async def _weather_summary(latitude: float, longitude: float) -> str:
-    """Hava durumunu metne çevirir; alınamazsa plan yine de kurulur."""
+@dataclass
+class _WeatherContext:
+    summary: str
+    is_bad: bool  # yağış/fırtına -> tema havuzu indoor'a daraltılır
+
+
+async def _fetch_weather_context(latitude: float, longitude: float) -> _WeatherContext:
+    """Hava durumunu özet metne ve indoor/outdoor kararına çevirir.
+
+    Hava servisi kritik değil: alınamazsa plan yine de kurulur, sadece
+    indoor/outdoor daraltması uygulanmaz (is_bad=False, karma önerilir).
+    """
     try:
         weather = await get_current_weather(latitude, longitude)
-        return f"{weather.temperature}°C, {weather.description}"
     except WeatherServiceError as exc:
         logger.warning("Hava durumu alınamadı: %s", exc)
-        return "bilinmiyor"
+        return _WeatherContext(summary="bilinmiyor", is_bad=False)
+
+    return _WeatherContext(
+        summary=f"{weather.temperature}°C, {weather.condition}",
+        is_bad=is_bad_weather(weather.code),
+    )
+
+
+async def _determine_themes(request: PlanRequest) -> list[str]:
+    """Kategori seçimi, serbest metin veya varsayılan temalardan birini kullanır."""
+    if request.categories:
+        return request.categories
+    if request.free_text:
+        return await resolve_themes(request.free_text)
+    return DEFAULT_THEMES
 
 
 async def build_day_plan(request: PlanRequest) -> DayPlan:
-    """Uçtan uca: konum çözümleme → temalar → mekan havuzu + hava → plan."""
+    """Uçtan uca: konum çözümleme → hava + temalar → mekan havuzu → plan."""
     # 1. Konumu netleştir (city verildiyse koordinata çevir)
     latitude, longitude = await _resolve_coordinates(request)
 
-    # 2. Temaları belirle
-    if request.categories:
-        themes = request.categories
-    elif request.free_text:
-        themes = await resolve_themes(request.free_text)
-    else:
-        themes = DEFAULT_THEMES
+    # 2. Hava durumu ve tema çözümleme birbirinden bağımsız, paralel çekilebilir
+    weather_task = _fetch_weather_context(latitude, longitude)
+    themes_task = _determine_themes(request)
+    weather, themes = await asyncio.gather(weather_task, themes_task)
 
-    logger.info("Seçilen temalar: %s", themes)
+    # 3. Hava kötüyse mekan araması başlamadan temaları indoor'a daralt.
+    # Bu yüzden mekan araması artık hava sonucunu bekliyor, eskisi gibi
+    # hava ile paralel çekilemiyor.
+    if weather.is_bad:
+        before = themes
+        themes = filter_for_bad_weather(themes)
+        if themes != before:
+            logger.info("Hava kötü, temalar daraltıldı: %s -> %s", before, themes)
 
-    # 3. Hava ve mekanları paralel çek
-    weather_task = _weather_summary(latitude, longitude)
-    places_task = _gather_places(latitude, longitude, themes)
-    weather, pool = await asyncio.gather(weather_task, places_task)
+    pool = await _gather_places(latitude, longitude, themes)
 
     if not pool:
         raise PlacesServiceError("Bu bölgede uygun mekan bulunamadı")
@@ -91,4 +116,4 @@ async def build_day_plan(request: PlanRequest) -> DayPlan:
     logger.info("Havuzda %d mekan var", len(pool))
 
     # 4. Planı kur
-    return await create_plan(request, pool, weather)
+    return await create_plan(request, pool, weather.summary)
