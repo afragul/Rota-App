@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     # Google Places (New) taban adresi
     google_places_base_url: str = "https://places.googleapis.com/v1"
 
+    # Şehir/adres -> koordinat çözümleme (Google Geocoding)
+    maps_api_key: SecretStr
+    google_geocoding_base_url: str = "https://maps.googleapis.com/maps/api/geocode/json"
+
     # --- LLM ---
     groq_api_key: SecretStr
     groq_model: str = "llama-3.3-70b-versatile"

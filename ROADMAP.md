@@ -4,11 +4,11 @@ Backend önce tamamlanıp sonra frontend'e geçilecek şekilde sıralandı. READ
 
 ## Milestone 1 — Backend'i tamamla
 
-- [ ] **Şehir/adres → koordinat çözümleme**: `/plan` şu an sadece `latitude`/`longitude` kabul ediyor. Bir geocoding servisi (ör. Google Geocoding API) ile şehir/semt adını koordinata çeviren bir adım eklenmeli. Not: `.env`'de kullanılmayan bir `MAPS_API_KEY` zaten duruyor — muhtemelen bu iş için ayrılmış, `app/core/config.py`'ye taşınıp kullanılmalı.
+- [x] **Şehir/adres → koordinat çözümleme**: `/plan` artık `latitude`/`longitude` ikilisi yerine `city` de kabul ediyor (`app/services/geocoding.py`, Google Geocoding API). `MAPS_API_KEY` bunun için kullanılmaya başlandı. Bağımsız test için `GET /geocode` eklendi.
 - [ ] **Hava durumuna göre kural bazlı indoor/outdoor ağırlıklandırma**: Şu an hava durumu sadece metin olarak LLM'e veriliyor, karar tamamen modele bırakılmış. `orchestrator.py` ya da `planner.py` seviyesinde açık bir kural eklenmeli (ör. yağmur/kar kodlarında tema havuzu otomatik olarak indoor ağırlıklı türlere daraltılsın).
 - [ ] **Rota/harita verisi**: Planlanan duraklar arasında mesafe/süre/rota (ör. Google Directions API) üretilip `PlanStop`'a veya `DayPlan`'a eklenmeli, frontend'in haritada çizgi çizebilmesi için.
 - [ ] **Eksik test kapsamı**: `weather.py`, `planner.py`, `orchestrator.py` için hiç test yok (sadece `places.py` test edilmiş). En azından hata yollarını (Groq çağrısı başarısız, şema uymuyor, hava alınamıyor) kapsayan testler eklenmeli.
-- [ ] **`.env.example` doldurulması**: Şu an boş dosya; `PLACES_API_KEY`, `GROQ_API_KEY`, `GROQ_MODEL`, `MAPS_API_KEY` (eklenince) için placeholder değerlerle doldurulmalı ki yeni katkıda bulunan biri (veya arkadaşın) hızlı kurulum yapabilsin.
+- [ ] **`.env.example` doldurulması**: Şu an boş dosya; `PLACES_API_KEY`, `MAPS_API_KEY`, `GROQ_API_KEY`, `GROQ_MODEL` için placeholder değerlerle doldurulmalı ki yeni katkıda bulunan biri (veya arkadaşın) hızlı kurulum yapabilsin.
 
 ## Milestone 2 — AI'nin soru sorabilmesi
 

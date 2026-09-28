@@ -25,12 +25,12 @@ Backend'in çekirdeği çalışır durumda. Aşağıdakiler **hazır**:
 
 - Konum bazlı mekân arama (Google Places "New" API)
 - Anlık hava durumu (Open-Meteo)
+- Şehir/adres adından koordinat çözümleme (Google Geocoding API) — `/plan` isteğinde `latitude`/`longitude` yerine `city` de verilebilir
 - Hava durumu + mekân havuzundan Groq ile alternatifli gün planı üretimi
 - Serbest metinden tema çözümleme (kullanıcı "ne istediğini" yazınca uygun temalara eşleme)
 
-Henüz **yapılmadı** (yol haritasında):
+Henüz **yapılmadı** (yol haritasında, bkz. `ROADMAP.md`):
 
-- Şehir adından koordinat çözümleme (şu an istek doğrudan enlem/boylam bekliyor)
 - Hava durumuna göre indoor/outdoor ağırlıklandırmanın kural bazlı/açık şekilde uygulanması (şu an bu karar tamamen LLM'e bırakılıyor)
 - Yapay zekânın eksik/belirsiz bilgi olduğunda kullanıcıya soru sorabilmesi (çok turlu diyalog)
 - Planın harita üzerinde rotaya (polyline/yol tarifi) dönüştürülmesi
@@ -42,6 +42,7 @@ Henüz **yapılmadı** (yol haritasında):
 - **Pydantic / pydantic-settings** — şema ve ortam değişkeni yönetimi
 - **httpx** — dış servis çağrıları
 - **Google Places API (New)** — mekân arama
+- **Google Geocoding API** — şehir/adres → koordinat
 - **Open-Meteo** — hava durumu
 - **Groq** (`groq`) — plan üretimi ve serbest metin → tema çözümleme
 - **pytest / pytest-asyncio / respx** — test
@@ -64,14 +65,16 @@ cp .env.example .env
 | Değişken | Zorunlu | Açıklama |
 | --- | --- | --- |
 | `PLACES_API_KEY` | evet | Google Places API anahtarı |
+| `MAPS_API_KEY` | evet | Google Geocoding API anahtarı (şehir/adres çözümleme) |
 | `GROQ_API_KEY` | evet | Groq API anahtarı ([console.groq.com](https://console.groq.com)) |
 | `GOOGLE_PLACES_BASE_URL` | hayır | Varsayılan: `https://places.googleapis.com/v1` |
+| `GOOGLE_GEOCODING_BASE_URL` | hayır | Varsayılan: `https://maps.googleapis.com/maps/api/geocode/json` |
 | `GROQ_MODEL` | hayır | Varsayılan: `llama-3.3-70b-versatile` |
 | `HTTP_TIMEOUT` | hayır | Dış servis çağrıları için saniye cinsinden zaman aşımı (varsayılan `10.0`) |
 | `APP_NAME` | hayır | Varsayılan: `Rota App` |
 | `DEBUG` | hayır | Varsayılan: `false` |
 
-`PLACES_API_KEY` ve `GROQ_API_KEY` olmadan uygulama açılışta hata verir (bilinçli tercih, bkz. `app/core/config.py`).
+`PLACES_API_KEY`, `MAPS_API_KEY` ve `GROQ_API_KEY` olmadan uygulama açılışta hata verir (bilinçli tercih, bkz. `app/core/config.py`).
 
 ## Çalıştırma
 
@@ -94,9 +97,12 @@ pytest
 | `GET` | `/health` | Sağlık kontrolü |
 | `GET` | `/weather` | Verilen koordinat için anlık hava durumu |
 | `GET` | `/places/nearby` | Verilen koordinat ve türlere göre yakındaki mekânlar |
+| `GET` | `/geocode` | Şehir/adres metnini koordinata çevirir |
 | `POST` | `/plan` | Konum, süre, bütçe, grup tipi ve tema/serbest metin tercihlerinden alternatif gün planları üretir |
 
 ### `POST /plan` örnek istek
+
+Koordinatla:
 
 ```json
 {
@@ -109,4 +115,16 @@ pytest
 }
 ```
 
-`categories` (örn. `["yemek", "kafe", "tarihi"]`) ile `free_text` birlikte de kullanılabilir; `categories` verilmişse öncelik onda, hiçbiri verilmezse varsayılan temalar (`yemek`, `kafe`, `tarihi`) kullanılır.
+Şehir adıyla (`latitude`/`longitude` yerine, backend geocoding ile koordinata çevirir):
+
+```json
+{
+  "city": "Bursa",
+  "duration_hours": 4,
+  "budget": "medium",
+  "group_type": "family",
+  "free_text": "Çocuklarla açık havada bir şeyler yapmak istiyoruz"
+}
+```
+
+`latitude`+`longitude` ikilisi veya `city` alanlarından biri zorunlu; hiçbiri verilmezse istek 422 ile reddedilir. `categories` (örn. `["yemek", "kafe", "tarihi"]`) ile `free_text` birlikte de kullanılabilir; `categories` verilmişse öncelik onda, hiçbiri verilmezse varsayılan temalar (`yemek`, `kafe`, `tarihi`) kullanılır.

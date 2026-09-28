@@ -1,7 +1,7 @@
 
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class BudgetLevel(StrEnum):
@@ -20,8 +20,14 @@ class GroupType(StrEnum):
 class PlanRequest(BaseModel):
     """Kullanıcıdan gelen istek."""
 
-    latitude: float
-    longitude: float
+    # Konum: latitude+longitude İKİLİSİ VEYA city verilmeli
+    latitude: float | None = None
+    longitude: float | None = None
+    city: str | None = Field(
+        default=None,
+        description="latitude/longitude verilmezse şehir/adres metninden koordinat çözümlenir",
+    )
+
     duration_hours: int = 4
     budget: BudgetLevel = BudgetLevel.MEDIUM
     group_type: GroupType = GroupType.FRIENDS
@@ -29,6 +35,13 @@ class PlanRequest(BaseModel):
     # Kategori seçimi VEYA serbest metin
     categories: list[str] | None = None
     free_text: str | None = None
+
+    @model_validator(mode="after")
+    def _konum_verildi_mi(self) -> "PlanRequest":
+        has_coords = self.latitude is not None and self.longitude is not None
+        if not has_coords and not self.city:
+            raise ValueError("latitude/longitude ikilisi veya city alanlarından biri verilmeli")
+        return self
 
 
 class PlanStop(BaseModel):
@@ -56,7 +69,10 @@ class DayPlan(BaseModel):
     """LLM'in döndüreceği nihai yapı."""
     weather_available: bool = Field(
         default=True,
-        description="Hava durumu bilgisi alınabildi mi. False ise plan, hava açık varsayılarak üretilmiştir.",
+        description=(
+            "Hava durumu bilgisi alınabildi mi. "
+            "False ise plan, hava açık varsayılarak üretilmiştir."
+        ),
     )
 
     alternatives: list[PlanAlternative] = Field(
