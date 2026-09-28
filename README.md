@@ -1,0 +1,112 @@
+# Rota App
+
+Gruplar (arkadaş, aile, çift, tek kişi) için yapay zekâ destekli günlük rota planlayıcı. Kullanıcı birkaç tercih seçer, sistem konumun hava durumunu ve yakındaki mekânları toplar, Groq üzerinden çalışan bir LLM bu verilerden birbirinden farklı alternatif planlar kurar.
+
+## Fikir
+
+Kullanıcı uygulamaya girdiğinde:
+
+1. **Konum/şehir** seçer.
+2. **Bütçe** seçer *(opsiyonel — düşük / orta / yüksek)*.
+3. **Aktivite türü** seçer *(opsiyonel — tarihi, yemek, kafe, açık hava, eğlence, alışveriş...)*.
+4. İsterse hazır seçenekler yerine **serbest metinle** ne istediğini yazar: *"Ailecek 4 saatimiz var, çocuklarla açık havada bir şeyler yapmak istiyoruz"* gibi. Gerekirse yapay zekâ netleştirmek için ek soru sorar.
+
+Sistem bu tercihlere göre:
+
+- Seçilen konumun **anlık hava durumunu** çeker.
+- Hava **yağışlı/kötü** ise kapalı alan (indoor) ağırlıklı, **açık/iyi** ise karma (indoor + outdoor) aktiviteler önerir.
+- Yakındaki mekânları **Google Places** üzerinden tema bazlı arar.
+- Toplanan mekân havuzunu, hava durumunu ve kullanıcı tercihlerini **Groq** üzerinden çalışan LLM'e vererek 2-3 alternatif, duraklı bir gün planı ürettirir.
+- Sonucu haritada rotaya dönüştürüp kullanıcıya sunar.
+
+## Şu anki durum
+
+Backend'in çekirdeği çalışır durumda. Aşağıdakiler **hazır**:
+
+- Konum bazlı mekân arama (Google Places "New" API)
+- Anlık hava durumu (Open-Meteo)
+- Hava durumu + mekân havuzundan Groq ile alternatifli gün planı üretimi
+- Serbest metinden tema çözümleme (kullanıcı "ne istediğini" yazınca uygun temalara eşleme)
+
+Henüz **yapılmadı** (yol haritasında):
+
+- Şehir adından koordinat çözümleme (şu an istek doğrudan enlem/boylam bekliyor)
+- Hava durumuna göre indoor/outdoor ağırlıklandırmanın kural bazlı/açık şekilde uygulanması (şu an bu karar tamamen LLM'e bırakılıyor)
+- Yapay zekânın eksik/belirsiz bilgi olduğunda kullanıcıya soru sorabilmesi (çok turlu diyalog)
+- Planın harita üzerinde rotaya (polyline/yol tarifi) dönüştürülmesi
+- Frontend / mobil arayüz
+
+## Teknoloji yığını
+
+- **FastAPI** — HTTP API
+- **Pydantic / pydantic-settings** — şema ve ortam değişkeni yönetimi
+- **httpx** — dış servis çağrıları
+- **Google Places API (New)** — mekân arama
+- **Open-Meteo** — hava durumu
+- **Groq** (`groq`) — plan üretimi ve serbest metin → tema çözümleme
+- **pytest / pytest-asyncio / respx** — test
+
+## Kurulum
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+
+pip install -e ".[dev]"
+```
+
+`.env` dosyası oluştur (`.env.example` referans alınabilir):
+
+```bash
+cp .env.example .env
+```
+
+| Değişken | Zorunlu | Açıklama |
+| --- | --- | --- |
+| `PLACES_API_KEY` | evet | Google Places API anahtarı |
+| `GROQ_API_KEY` | evet | Groq API anahtarı ([console.groq.com](https://console.groq.com)) |
+| `GOOGLE_PLACES_BASE_URL` | hayır | Varsayılan: `https://places.googleapis.com/v1` |
+| `GROQ_MODEL` | hayır | Varsayılan: `llama-3.3-70b-versatile` |
+| `HTTP_TIMEOUT` | hayır | Dış servis çağrıları için saniye cinsinden zaman aşımı (varsayılan `10.0`) |
+| `APP_NAME` | hayır | Varsayılan: `Rota App` |
+| `DEBUG` | hayır | Varsayılan: `false` |
+
+`PLACES_API_KEY` ve `GROQ_API_KEY` olmadan uygulama açılışta hata verir (bilinçli tercih, bkz. `app/core/config.py`).
+
+## Çalıştırma
+
+```bash
+fastapi dev app/main.py
+```
+
+API `http://127.0.0.1:8000` üzerinde ayağa kalkar, dokümantasyon `/docs`'ta.
+
+## Test
+
+```bash
+pytest
+```
+
+## API uç noktaları
+
+| Metot | Yol | Açıklama |
+| --- | --- | --- |
+| `GET` | `/health` | Sağlık kontrolü |
+| `GET` | `/weather` | Verilen koordinat için anlık hava durumu |
+| `GET` | `/places/nearby` | Verilen koordinat ve türlere göre yakındaki mekânlar |
+| `POST` | `/plan` | Konum, süre, bütçe, grup tipi ve tema/serbest metin tercihlerinden alternatif gün planları üretir |
+
+### `POST /plan` örnek istek
+
+```json
+{
+  "latitude": 40.1826,
+  "longitude": 29.0665,
+  "duration_hours": 4,
+  "budget": "medium",
+  "group_type": "family",
+  "free_text": "Çocuklarla açık havada bir şeyler yapmak istiyoruz"
+}
+```
+
+`categories` (örn. `["yemek", "kafe", "tarihi"]`) ile `free_text` birlikte de kullanılabilir; `categories` verilmişse öncelik onda, hiçbiri verilmezse varsayılan temalar (`yemek`, `kafe`, `tarihi`) kullanılır.

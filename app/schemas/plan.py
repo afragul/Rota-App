@@ -54,6 +54,10 @@ class PlanAlternative(BaseModel):
 
 class DayPlan(BaseModel):
     """LLM'in döndüreceği nihai yapı."""
+    weather_available: bool = Field(
+        default=True,
+        description="Hava durumu bilgisi alınabildi mi. False ise plan, hava açık varsayılarak üretilmiştir.",
+    )
 
     alternatives: list[PlanAlternative] = Field(
         description="Birbirinden farklı 2-3 alternatif plan"

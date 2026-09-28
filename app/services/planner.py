@@ -1,8 +1,8 @@
+import json
 import logging
 
-from google import genai
-from google.genai import types
-from pydantic import BaseModel
+from groq import AsyncGroq
+from pydantic import BaseModel, ValidationError
 
 from app.core.config import get_settings
 from app.core.themes import DEFAULT_THEMES, THEME_TYPES
@@ -32,6 +32,21 @@ KESİN KURALLAR:
 - Birbirinden gerçekten farklı 2-3 alternatif üret.
 - Öneriler somut olsun. "Güzel vakit geçirirsiniz" gibi boş cümleler yazma.
 """
+
+
+def _schema_instruction(model: type[BaseModel]) -> str:
+    """Modelin uyması gereken JSON şemasını prompt'a gömer.
+
+    Gemini'nin response_schema'sı çıktıyı şemaya zorluyordu. Groq'un json_object
+    modu ise sadece geçerli JSON döndürmeyi garanti ediyor, şemayı zorlamıyor.
+    Bu yüzden şemayı prompt içinde açıkça veriyoruz; dönen JSON yine de
+    Pydantic ile doğrulanıyor (ValidationError -> PlannerServiceError).
+    """
+    schema = json.dumps(model.model_json_schema(), ensure_ascii=False)
+    return (
+        "\n\nYanıtını SADECE şu JSON şemasına uyan bir JSON nesnesi olarak ver, "
+        f"başka hiçbir açıklama/metin ekleme:\n{schema}"
+    )
 
 
 def _format_places(places: list[Place]) -> str:
@@ -95,27 +110,31 @@ async def create_plan(
         raise PlannerServiceError("Plan kurmak için mekan bulunamadı")
 
     settings = get_settings()
-    client = genai.Client(api_key=settings.gemini_api_key.get_secret_value())
+    client = AsyncGroq(api_key=settings.groq_api_key.get_secret_value())
 
     try:
-        response = await client.aio.models.generate_content(
-            model=settings.gemini_model,
-            contents=_build_prompt(request, places, weather_summary),
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
-                response_mime_type="application/json",
-                response_schema=DayPlan,
-                temperature=0.8,
-            ),
+        response = await client.chat.completions.create(
+            model=settings.groq_model,
+            messages=[
+                {"role": "system", "content": SYSTEM_INSTRUCTION + _schema_instruction(DayPlan)},
+                {"role": "user", "content": _build_prompt(request, places, weather_summary)},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.8,
         )
     except Exception as exc:
-        logger.warning("Gemini çağrısı başarısız: %s", exc)
+        logger.warning("Groq çağrısı başarısız: %s", exc)
         raise PlannerServiceError("Plan servisi yanıt vermedi") from exc
 
-    plan = response.parsed
-    if plan is None:
-        logger.warning("Gemini yanıtı şemaya uymadı: %s", response.text[:300])
-        raise PlannerServiceError("Plan yanıtı çözümlenemedi")
+    content = response.choices[0].message.content
+    if not content:
+        raise PlannerServiceError("Plan servisi boş yanıt döndürdü")
+
+    try:
+        plan = DayPlan.model_validate_json(content)
+    except ValidationError:
+        logger.warning("Groq yanıtı şemaya uymadı: %s", content[:300])
+        raise PlannerServiceError("Plan yanıtı çözümlenemedi") from None
 
     return _validate_stops(plan, places)
 
@@ -123,32 +142,35 @@ async def create_plan(
 async def resolve_themes(free_text: str) -> list[str]:
     """Kullanıcının serbest metnini tema listesine çevirir."""
     settings = get_settings()
-    client = genai.Client(api_key=settings.gemini_api_key.get_secret_value())
+    client = AsyncGroq(api_key=settings.groq_api_key.get_secret_value())
 
     valid = ", ".join(THEME_TYPES.keys())
     prompt = (
         f"Kullanıcı isteği: {free_text}\n\n"
         f"Bu isteğe uygun temaları seç. SADECE şunlardan seç: {valid}\n"
-        f"En fazla 3 tema seç."
+        f"En fazla 3 tema seç." + _schema_instruction(_ThemeSelection)
     )
 
     try:
-        response = await client.aio.models.generate_content(
-            model=settings.gemini_model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=_ThemeSelection,
-                temperature=0.2,
-            ),
+        response = await client.chat.completions.create(
+            model=settings.groq_model,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.2,
         )
     except Exception as exc:
         logger.warning("Tema çözümleme başarısız: %s", exc)
         return DEFAULT_THEMES
 
-    if response.parsed is None:
+    content = response.choices[0].message.content
+    if not content:
+        return DEFAULT_THEMES
+
+    try:
+        selection = _ThemeSelection.model_validate_json(content)
+    except ValidationError:
         return DEFAULT_THEMES
 
     # Model uydurma tema döndürebilir, süz
-    themes = [t for t in response.parsed.themes if t in THEME_TYPES]
+    themes = [t for t in selection.themes if t in THEME_TYPES]
     return themes or DEFAULT_THEMES

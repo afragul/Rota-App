@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     google_places_base_url: str = "https://places.googleapis.com/v1"
 
     # --- LLM ---
-    gemini_api_key: SecretStr
-    gemini_model: str = "gemini-2.5-flash"
+    groq_api_key: SecretStr
+    groq_model: str = "llama-3.3-70b-versatile"
 
     # Tüm dış çağrılar için ortak zaman aşımı (saniye)
     http_timeout: float = 10.0

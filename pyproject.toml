@@ -8,6 +8,7 @@ dependencies = [
     "fastapi[standard]",
     "pydantic-settings",
     "httpx",
+    "groq",
 ]
 
 [project.optional-dependencies]
