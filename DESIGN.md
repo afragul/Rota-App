@@ -54,8 +54,8 @@ Zaman aşımı/hata durumunda (502) adımın kaldığı yerde hata mesajı + "Te
 
 ### 3.5 Plan detay
 - Üstte seçilen alternatifin başlığı/özeti, sekmeyle diğer alternatiflere geçiş.
-- **Zaman çizelgesi (timeline)**: her `PlanStop` için sırayla — `order`, `arrival_time`, `duration_minutes`, `activity`, `recommendation`, `estimated_cost`. Dikey timeline, her durak bir kart.
-- **Harita**: duraklar pin olarak işaretli, aralarında rota çizgisi. **Backend'de rota/polyline üretimi henüz yok** — ilk sürümde harita sadece durakların konumunu (Places'tan gelen `latitude`/`longitude`) gösterebilir, adım adım yol tarifi olmadan. Rota çizgisi ileride eklenecek özellik olarak ayrı bir katman şeklinde tasarlanmalı ki backend hazır olduğunda sadece veri bağlanabilsin.
+- **Zaman çizelgesi (timeline)**: her `PlanStop` için sırayla — `order`, `arrival_time`, `duration_minutes`, `activity`, `recommendation`, `estimated_cost`, `name`. Dikey timeline, her durak bir kart.
+- **Harita**: duraklar pin olarak işaretli, aralarında rota çizgisi. `PlanStop.latitude`/`.longitude` artık API'den geliyor, pin basmak için yeterli. **Backend'de rota/polyline (duraklar arası çizgi, mesafe, yürüme süresi) henüz yok** — ilk sürümde harita sadece pin gösterebilir, adım adım yol tarifi olmadan. Rota çizgisi ileride eklenecek özellik olarak ayrı bir katman şeklinde tasarlanmalı ki backend hazır olduğunda sadece veri bağlanabilsin.
 - Alt bar: "Bu planı paylaş" / "Tercihleri değiştir".
 
 ## 4. Bileşen envanteri
@@ -110,7 +110,8 @@ Henüz sabit bir marka kimliği yok; aşağıdaki değerler ilk uygulama için �
 | --- | --- |
 | Hava rozeti | `weather_available` |
 | Alternatif kartı | `alternatives[].theme`, `.title`, `.summary` |
-| Timeline item | `stops[].order`, `.arrival_time`, `.duration_minutes`, `.activity`, `.recommendation`, `.estimated_cost` |
+| Timeline item | `stops[].order`, `.arrival_time`, `.duration_minutes`, `.activity`, `.recommendation`, `.estimated_cost`, `.name` |
+| Harita pin'i | `stops[].latitude`, `.longitude` |
 
 ## 8. Sonraki adımlar
 

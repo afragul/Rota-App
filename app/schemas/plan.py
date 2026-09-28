@@ -55,6 +55,13 @@ class PlanStop(BaseModel):
     recommendation: str = Field(description="Somut öneri: ne yenir, ne görülür")
     estimated_cost: int = Field(description="Kişi başı tahmini harcama, TL")
 
+    # LLM bu alanları üretmez, null bırakır; mekan havuzundan sistem doldurur
+    # (bkz. app/services/planner.py::_validate_and_enrich_stops). Haritada pin
+    # basmak için gerekli.
+    name: str | None = Field(default=None, description="Mekanın adı (sistem doldurur)")
+    latitude: float | None = Field(default=None, description="Mekanın enlemi (sistem doldurur)")
+    longitude: float | None = Field(default=None, description="Mekanın boylamı (sistem doldurur)")
+
 
 class PlanAlternative(BaseModel):
     """Tek bir temalı gün planı."""

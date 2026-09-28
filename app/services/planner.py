@@ -31,6 +31,7 @@ KESİN KURALLAR:
 - Verilen toplam süreyi aşma.
 - Birbirinden gerçekten farklı 2-3 alternatif üret.
 - Öneriler somut olsun. "Güzel vakit geçirirsiniz" gibi boş cümleler yazma.
+- Her durağın name/latitude/longitude alanlarını null bırak, bunları sen değil sistem dolduracak.
 """
 
 
@@ -80,13 +81,28 @@ Bu mekanlardan {request.duration_hours} saatlik alternatif planlar kur.
 """
 
 
-def _validate_stops(plan: DayPlan, places: list[Place]) -> DayPlan:
-    """Model uydurma place_id döndürdüyse o durakları eler."""
-    valid_ids = {p.place_id for p in places}
+def _validate_and_enrich_stops(plan: DayPlan, places: list[Place]) -> DayPlan:
+    """Model uydurma place_id döndürdüyse o durakları eler.
+
+    Geçerli duraklar mekan havuzundan gelen gerçek ad/koordinatla
+    zenginleştirilir (LLM bunları üretmiyor, null bırakıyor -- haritada pin
+    basabilmek için gerekli, ama LLM'e ürettirmek halüsinasyon riski taşır).
+    """
+    by_id = {p.place_id: p for p in places}
 
     for alternative in plan.alternatives:
         before = len(alternative.stops)
-        alternative.stops = [s for s in alternative.stops if s.place_id in valid_ids]
+        valid_stops = []
+        for stop in alternative.stops:
+            place = by_id.get(stop.place_id)
+            if place is None:
+                continue
+            stop.name = place.name
+            stop.latitude = place.latitude
+            stop.longitude = place.longitude
+            valid_stops.append(stop)
+        alternative.stops = valid_stops
+
         dropped = before - len(alternative.stops)
         if dropped:
             logger.warning("'%s' planında %d uydurma mekan elendi", alternative.theme, dropped)
@@ -136,7 +152,7 @@ async def create_plan(
         logger.warning("Groq yanıtı şemaya uymadı: %s", content[:300])
         raise PlannerServiceError("Plan yanıtı çözümlenemedi") from None
 
-    return _validate_stops(plan, places)
+    return _validate_and_enrich_stops(plan, places)
 
 
 async def resolve_themes(free_text: str) -> list[str]:
