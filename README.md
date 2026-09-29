@@ -27,13 +27,14 @@ Backend'in çekirdeği çalışır durumda. Aşağıdakiler **hazır**:
 - Anlık hava durumu (Open-Meteo)
 - Şehir/adres adından koordinat çözümleme (Google Geocoding API) — `/plan` isteğinde `latitude`/`longitude` yerine `city` de verilebilir
 - Hava durumuna göre kural bazlı indoor/outdoor daraltma: yağış/fırtına kodlarında sadece açık havada anlamlı temalar (`acik_hava`) mekan aramasından önce elenir, iyi havada karma kalır (`app/core/themes.py::filter_for_bad_weather`, `app/services/weather.py::is_bad_weather`)
+- Duraklar arası mesafe/süre/harita çizgisi, ulaşım şekli kullanıcı seçimli: yürüyüş, toplu taşıma, araba (Google Routes API, `PlanAlternative.legs`)
 - Hava durumu + mekân havuzundan Groq ile alternatifli gün planı üretimi
 - Serbest metinden tema çözümleme (kullanıcı "ne istediğini" yazınca uygun temalara eşleme)
 
 Henüz **yapılmadı** (yol haritasında, bkz. `ROADMAP.md`):
 
 - Yapay zekânın eksik/belirsiz bilgi olduğunda kullanıcıya soru sorabilmesi (çok turlu diyalog)
-- Planın harita üzerinde rotaya (polyline/yol tarifi) dönüştürülmesi
+- Adım adım yol tarifi (rota çizgisi hazır, talimat metinleri yok)
 - Frontend / mobil arayüz
 
 ## Teknoloji yığını
@@ -65,7 +66,8 @@ cp .env.example .env
 | Değişken | Zorunlu | Açıklama |
 | --- | --- | --- |
 | `PLACES_API_KEY` | evet | Google Places API anahtarı |
-| `MAPS_API_KEY` | evet | Google Geocoding API anahtarı (şehir/adres çözümleme) |
+| `GEOCODING_API_KEY` | evet | Google Geocoding API anahtarı (şehir/adres çözümleme) |
+| `ROUTES_API_KEY` | evet | Google Routes API anahtarı (duraklar arası rota çizgisi) |
 | `GROQ_API_KEY` | evet | Groq API anahtarı ([console.groq.com](https://console.groq.com)) |
 | `GOOGLE_PLACES_BASE_URL` | hayır | Varsayılan: `https://places.googleapis.com/v1` |
 | `GOOGLE_GEOCODING_BASE_URL` | hayır | Varsayılan: `https://maps.googleapis.com/maps/api/geocode/json` |
@@ -74,7 +76,7 @@ cp .env.example .env
 | `APP_NAME` | hayır | Varsayılan: `Rota App` |
 | `DEBUG` | hayır | Varsayılan: `false` |
 
-`PLACES_API_KEY`, `MAPS_API_KEY` ve `GROQ_API_KEY` olmadan uygulama açılışta hata verir (bilinçli tercih, bkz. `app/core/config.py`).
+`PLACES_API_KEY`, `GEOCODING_API_KEY`, `ROUTES_API_KEY` ve `GROQ_API_KEY` olmadan uygulama açılışta hata verir (bilinçli tercih, bkz. `app/core/config.py`).
 
 ## Çalıştırma
 
