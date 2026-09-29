@@ -23,8 +23,12 @@ class Settings(BaseSettings):
     google_places_base_url: str = "https://places.googleapis.com/v1"
 
     # Şehir/adres -> koordinat çözümleme (Google Geocoding)
-    maps_api_key: SecretStr
+    geocoding_api_key: SecretStr
     google_geocoding_base_url: str = "https://maps.googleapis.com/maps/api/geocode/json"
+
+    # Duraklar arası rota/mesafe/süre (Google Routes API); ayrı key, ayrı kısıtlama
+    routes_api_key: SecretStr
+    google_routes_base_url: str = "https://routes.googleapis.com/directions/v2:computeRoutes"
 
     # --- LLM ---
     groq_api_key: SecretStr

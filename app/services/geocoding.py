@@ -29,7 +29,7 @@ async def geocode_address(address: str) -> GeocodeResult:
     params = {
         "address": address,
         "language": "tr",
-        "key": settings.maps_api_key.get_secret_value(),
+        "key": settings.geocoding_api_key.get_secret_value(),
     }
 
     try:

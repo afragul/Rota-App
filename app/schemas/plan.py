@@ -1,4 +1,3 @@
-
 from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
@@ -17,6 +16,14 @@ class GroupType(StrEnum):
     FAMILY = "family"
 
 
+class TravelMode(StrEnum):
+    """Duraklar arası ulaşım şekli; değerler Google Routes API'nin travelMode adlarıdır."""
+
+    WALK = "WALK"
+    TRANSIT = "TRANSIT"
+    DRIVE = "DRIVE"
+
+
 class PlanRequest(BaseModel):
     """Kullanıcıdan gelen istek."""
 
@@ -31,6 +38,7 @@ class PlanRequest(BaseModel):
     duration_hours: int = 4
     budget: BudgetLevel = BudgetLevel.MEDIUM
     group_type: GroupType = GroupType.FRIENDS
+    travel_mode: TravelMode = TravelMode.WALK
 
     # Kategori seçimi VEYA serbest metin
     categories: list[str] | None = None
@@ -63,6 +71,18 @@ class PlanStop(BaseModel):
     longitude: float | None = Field(default=None, description="Mekanın boylamı (sistem doldurur)")
 
 
+class RouteLeg(BaseModel):
+    """İki ardışık durak arasındaki ulaşım ayağı (harita çizgisi için)."""
+
+    travel_mode: TravelMode = Field(description="Bu ayağın ulaşım şekli")
+
+    from_order: int = Field(description="Başlangıç durağının order değeri")
+    to_order: int = Field(description="Varış durağının order değeri")
+    distance_meters: int = Field(description="Mesafe, metre")
+    duration_minutes: int = Field(description='Tahmini süre, dakika (UI: "15 dk yürüyüş")')
+    polyline: str = Field(description="Google encoded polyline; frontend decode edip çizer")
+
+
 class PlanAlternative(BaseModel):
     """Tek bir temalı gün planı."""
 
@@ -71,9 +91,22 @@ class PlanAlternative(BaseModel):
     summary: str = Field(description="Günün özeti, 1-2 cümle")
     stops: list[PlanStop]
 
+    # LLM üretmez; orchestrator, rota servisinden doldurur. Rota alınamazsa boş kalır.
+    legs: list[RouteLeg] = Field(
+        default_factory=list, description="Ardışık duraklar arası rota (sistem doldurur)"
+    )
+    routes_available: bool = Field(
+        default=True,
+        description=(
+            "Rota bilgisi alınabildi mi. False ise legs boştur ve UI yalnızca pin "
+            "gösterebilir. Tek duraklı planda rota gerekmediği için True kalır."
+        ),
+    )
+
 
 class DayPlan(BaseModel):
     """LLM'in döndüreceği nihai yapı."""
+
     weather_available: bool = Field(
         default=True,
         description=(

@@ -8,6 +8,7 @@ from app.schemas.plan import DayPlan, PlanRequest
 from app.services.geocoding import geocode_address
 from app.services.places import PlacesServiceError, search_nearby
 from app.services.planner import create_plan, resolve_themes
+from app.services.routes import add_routes
 from app.services.weather import WeatherServiceError, get_current_weather, is_bad_weather
 
 logger = logging.getLogger(__name__)
@@ -116,4 +117,7 @@ async def build_day_plan(request: PlanRequest) -> DayPlan:
     logger.info("Havuzda %d mekan var", len(pool))
 
     # 4. Planı kur
-    return await create_plan(request, pool, weather.summary)
+    plan = await create_plan(request, pool, weather.summary)
+
+    # 5. Rota çizgisini seçilen ulaşım moduyla ekle (kritik değil, hata planı düşürmez)
+    return await add_routes(plan, request.travel_mode)
