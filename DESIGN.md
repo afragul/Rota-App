@@ -1,6 +1,6 @@
 # Rota App — UI Tasarım Dokümanı
 
-Bu doküman henüz yazılmamış olan frontend/arayüz için bir başlangıç noktasıdır. Backend'de (`app/`) hazır olan uç noktalar ve şemalar (`PlanRequest`, `DayPlan`) referans alınarak hazırlandı; ekranlar ve alanlar API ile birebir eşleşecek şekilde tanımlandı. README.md'deki "Şu anki durum" bölümüyle tutarlı: burada tarif edilen bazı adımlar (şehir arama, indoor/outdoor rozeti, harita rotası) backend'de henüz karşılığı olmayan **hedef** akışlardır, ilgili yerlerde belirtildi.
+Bu doküman henüz yazılmamış olan frontend/arayüz için bir başlangıç noktasıdır. Backend'de (`app/`) hazır olan uç noktalar ve şemalar (`PlanRequest`, `DayPlan`, `ClarificationNeeded`) referans alınarak hazırlandı; ekranlar ve alanlar API ile birebir eşleşecek şekilde tanımlandı. README.md'deki "Şu anki durum" bölümüyle tutarlı: burada tarif edilen bazı adımlar (şehir arama, indoor/outdoor rozeti, harita rotası) backend'de henüz karşılığı olmayan **hedef** akışlardır, ilgili yerlerde belirtildi.
 
 ## 1. Tasarım ilkeleri
 
@@ -35,7 +35,7 @@ Geri dönüş: Sonuç ekranından "Tercihleri değiştir" ile 2. adıma, plan de
 - **Süre** — saat girişi (stepper, 1-12 saat), varsayılan 4.
 - **Aktivite türü** — çoklu seçim chip grubu, backend temalarıyla birebir: Tarihi, Alışveriş, Kafe, Yemek, Açık Hava, Eğlence (`THEME_TYPES` anahtarları: `tarihi`, `alisveris`, `kafe`, `yemek`, `acik_hava`, `eglence`). Hiçbiri seçilmezse `categories` gönderilmez.
 - **Serbest metin** — genişleyebilen textarea, placeholder: *"Örn: Ailecek 4 saatimiz var, çocuklarla açık havada bir şeyler yapmak istiyoruz"*. Chip seçimiyle aynı anda kullanılabilir.
-- **AI'nin soru sorması** — backend bunu henüz desteklemiyor (bkz. README yol haritası). UI'da bu alan için serbest metin kutusunun altına, ilerideki bir sürümde sohbet balonu şeklinde takip sorusu gösterecek boş bir alan (chat thread) olarak tasarlanabilir ama fonksiyonel olarak devre dışı bırakılmalı.
+- **AI'nin soru sorması** — backend artık destekliyor: `free_text` belirsizse (`categories` boşken) `POST /plan`, `DayPlan` yerine `{"question": "..."}` döner. UI, serbest metin kutusunun altında bir sohbet balonu olarak soruyu göstermeli, kullanıcının cevabını almalı ve aynı `/plan` isteğini `previous_question`/`clarification_answer` alanlarıyla (orijinal tüm alanlarla birlikte) tekrar göndermeli. Backend stateless olduğu için bu iki alanı geri göndermek istemcinin sorumluluğu — istemci state'i kaybederse (ör. sayfa yenilenirse) yeniden başa dönülür, bu kabul edilebilir bir sınırlama.
 - Alt bar: "Plan Oluştur" — her zaman aktif (tüm alanlar opsiyonel, sadece konum zorunlu).
 
 ### 3.3 Yükleniyor
@@ -94,6 +94,7 @@ Henüz sabit bir marka kimliği yok; aşağıdaki değerler ilk uygulama için �
 | Plan üretilemedi | `/plan` → 502 (`PlannerServiceError`) | "Plan oluşturulamadı, tekrar dener misin?" + tekrar dene butonu |
 | Bazı duraklar elendi | Backend geçersiz `place_id` içeren durakları sessizce eler | UI'da fark edilmez, kullanıcıya ayrıca gösterilmez — timeline zaten elenmiş listeyle gelir |
 | Boş form | Hiçbir tercih seçilmedi | Sorun değil, varsayılanlarla (`medium` bütçe, `friends`, 4 saat, tema yok) devam edilir |
+| Netleştirme gerekli | `/plan` → `{"question": "..."}` (`DayPlan` değil) | Soru sohbet balonu olarak gösterilir; cevap alınınca aynı istek `previous_question`/`clarification_answer` ile bir kez daha gönderilir |
 
 ## 7. API ↔ UI alan eşlemesi
 

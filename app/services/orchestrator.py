@@ -4,10 +4,10 @@ from dataclasses import dataclass
 
 from app.core.themes import DEFAULT_THEMES, filter_for_bad_weather, types_for
 from app.schemas.places import Place
-from app.schemas.plan import DayPlan, PlanRequest
+from app.schemas.plan import ClarificationNeeded, DayPlan, PlanRequest
 from app.services.geocoding import geocode_address
 from app.services.places import PlacesServiceError, search_nearby
-from app.services.planner import create_plan, resolve_themes
+from app.services.planner import check_ambiguity, create_plan, resolve_themes
 from app.services.routes import add_routes
 from app.services.weather import WeatherServiceError, get_current_weather, is_bad_weather
 
@@ -90,8 +90,16 @@ async def _determine_themes(request: PlanRequest) -> list[str]:
     return DEFAULT_THEMES
 
 
-async def build_day_plan(request: PlanRequest) -> DayPlan:
-    """Uçtan uca: konum çözümleme → hava + temalar → mekan havuzu → plan."""
+async def build_day_plan(request: PlanRequest) -> DayPlan | ClarificationNeeded:
+    """Uçtan uca: (belirsizlik kontrolü) → konum çözümleme → hava+temalar → mekan havuzu → plan."""
+    # 0. free_text tek başına tema kaynağıysa ve bu ilk turdaysa (henüz bir
+    # cevap gelmemişse) belirsizlik kontrolü yap. Geocoding/hava/mekan
+    # aramasından ÖNCE çalışır ki belirsizse o çağrılar hiç yapılmasın.
+    if request.free_text and not request.categories and not request.clarification_answer:
+        question = await check_ambiguity(request)
+        if question:
+            return ClarificationNeeded(question=question)
+
     # 1. Konumu netleştir (city verildiyse koordinata çevir)
     latitude, longitude = await _resolve_coordinates(request)
 

@@ -15,9 +15,9 @@ Backend önce tamamlanıp sonra frontend'e geçilecek şekilde sıralandı. READ
 
 ## Milestone 2 — AI'nin soru sorabilmesi
 
-- [ ] Kullanıcının serbest metni belirsiz/eksikse (ör. süre veya kaç kişi olduğu net değilse) planner'ın doğrudan plan yerine bir netleştirme sorusu döndürebilmesi.
-- [ ] Bunun için backend'in şu anki stateless yapısı yetmez — bir konuşma geçmişi (session/conversation id) tutulmalı. Kapsam: yeni bir tablo/state deposu mu, yoksa istemcinin geçmişi her istekte geri göndermesi mi — bu bir tasarım kararı, uygulamaya geçmeden önce konuşulmalı.
-- [ ] `/plan` endpoint'inin ya çok turlu hale getirilmesi ya da ayrı bir `/plan/clarify` akışı eklenmesi.
+- [x] Serbest metin belirsiz/çelişkiliyse (ör. "bir şeyler yapalım" gibi hiçbir sinyal vermiyorsa) `build_day_plan`, `create_plan`'a gitmeden önce `app/services/planner.py::check_ambiguity` ile bir netleştirme sorusu döndürebiliyor (`ClarificationNeeded`). Kontrol kritik değil: Groq çöker/bozuk yanıt dönerse `None`'a düşülür, plana normal devam edilir (`resolve_themes`'teki `DEFAULT_THEMES` deseniyle aynı).
+- [x] Karar: ek bir state deposu/tablo YOK. Backend diğer her endpoint gibi stateless kaldı. İstemci, önceki soruyu ve kullanıcının cevabını `PlanRequest.previous_question` / `.clarification_answer` ile bir sonraki istekte geri gönderir; bu ikisi doluysa belirsizlik kontrolü koşulsuz atlanır (tek netleştirme turu, döngü yok).
+- [x] `/plan` aynı endpoint'te çok turlu hale getirildi (ayrı bir `/plan/clarify` eklenmedi). `response_model` artık `DayPlan | ClarificationNeeded`; hangi tip döndüğü istemci tarafında ayırt edilir (`ClarificationNeeded` sadece `question` alanı taşır).
 
 ## Milestone 3 — Frontend
 

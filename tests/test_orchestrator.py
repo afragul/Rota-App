@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from app.core.config import get_settings
-from app.schemas.plan import PlanRequest
+from app.schemas.plan import ClarificationNeeded, PlanRequest
 from app.services.geocoding import GeocodingServiceError
 from app.services.orchestrator import build_day_plan
 from app.services.places import PlacesServiceError
@@ -200,13 +200,17 @@ async def test_hava_servisi_coker_plan_yine_kurulur(fake_groq):
 
 @respx.mock
 async def test_serbest_metin_temalari_mekan_aramasina_yansir(fake_groq):
-    """free_text -> resolve_themes (1. Groq çağrısı) -> Places türleri -> plan (2. çağrı)."""
-    fake = fake_groq(json.dumps({"themes": ["kafe"]}), PLAN_JSON)
+    """free_text -> belirsizlik kontrolü (1) -> resolve_themes (2) -> Places türleri -> plan (3)."""
+    fake = fake_groq(
+        json.dumps({"needs_clarification": False}),
+        json.dumps({"themes": ["kafe"]}),
+        PLAN_JSON,
+    )
     routes = _mock_all()
 
     await build_day_plan(PlanRequest(city="Bursa", free_text="kahve içmek istiyorum"))
 
-    assert len(fake.calls) == 2
+    assert len(fake.calls) == 3
     sent = _requested_types(routes["places"])
     assert len(sent) == 1 and "cafe" in sent[0]
 
@@ -284,3 +288,75 @@ async def test_secilen_ulasim_modu_rotaya_iletilir(fake_groq):
 
     assert json.loads(routes["routes"].calls.last.request.content)["travelMode"] == "DRIVE"
     assert plan.alternatives[0].legs[0].travel_mode == "DRIVE"
+
+
+@respx.mock
+async def test_belirsiz_serbest_metinde_plan_yerine_soru_doner_api_cagrilmaz(fake_groq):
+    """Belirsizse hiçbir dış API çağrılmamalı: geocoding/hava/mekan israf edilmemeli."""
+    fake = fake_groq(json.dumps({"needs_clarification": True, "question": "Kaç kişisiniz?"}))
+    routes = _mock_all()
+
+    result = await build_day_plan(PlanRequest(city="Bursa", free_text="bir şeyler yapalım"))
+
+    assert isinstance(result, ClarificationNeeded)
+    assert result.question == "Kaç kişisiniz?"
+    assert not routes["geocode"].called
+    assert not routes["weather"].called
+    assert not routes["places"].called
+    assert len(fake.calls) == 1  # sadece belirsizlik kontrolü, create_plan çağrılmadı
+
+
+@respx.mock
+async def test_kategori_verilmisse_belirsizlik_kontrolu_atlanir(fake_groq):
+    """categories verilmişse free_text'in belirsizliği önemsiz: tema zaten categories'ten gelir."""
+    fake = fake_groq(PLAN_JSON)
+    _mock_all()
+
+    plan = await build_day_plan(
+        PlanRequest(city="Bursa", categories=["kafe"], free_text="bir şeyler yapalım")
+    )
+
+    assert plan.alternatives
+    assert len(fake.calls) == 1  # sadece create_plan, belirsizlik kontrolü hiç çağrılmadı
+
+
+@respx.mock
+async def test_clarification_cevabi_verilince_kontrol_atlanir_plan_kurulur(fake_groq):
+    """previous_question/clarification_answer doluysa belirsizlik kontrolü atlanır.
+
+    free_text tek başına (categories yok) yine de resolve_themes'i tetikler; bu
+    yüzden akış resolve_themes + create_plan olmak üzere 2 Groq çağrısı yapar.
+    """
+    fake = fake_groq(json.dumps({"themes": ["kafe"]}), PLAN_JSON)
+    routes = _mock_all()
+
+    plan = await build_day_plan(
+        PlanRequest(
+            city="Bursa",
+            free_text="bir şeyler yapalım",
+            previous_question="Kaç kişisiniz?",
+            clarification_answer="4 kişiyiz",
+        )
+    )
+
+    assert routes["geocode"].called
+    assert plan.alternatives
+    assert len(fake.calls) == 2  # belirsizlik kontrolü atlandı: resolve_themes + create_plan
+    user_prompt = fake.calls[1]["messages"][1]["content"]
+    assert "4 kişiyiz" in user_prompt
+
+
+@respx.mock
+async def test_belirsizlik_kontrolu_cokerse_plana_devam_edilir(fake_groq):
+    """Belirsizlik kontrolü kritik değil: Groq çökerse plan yine kurulmalı.
+
+    Ambiguity check hatada None'a düşer, ardından resolve_themes + create_plan
+    normal akışıyla devam eder (toplam 3 Groq çağrısı).
+    """
+    fake = fake_groq(RuntimeError("groq çöktü"), json.dumps({"themes": ["kafe"]}), PLAN_JSON)
+    _mock_all()
+
+    plan = await build_day_plan(PlanRequest(city="Bursa", free_text="bir şeyler yapalım"))
+
+    assert plan.alternatives
+    assert len(fake.calls) == 3
