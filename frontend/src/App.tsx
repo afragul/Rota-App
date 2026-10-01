@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, createPlan } from './api'
+import { ApiError, createPlan, type LatLng } from './api'
 import { ErrorBanner } from './components/ErrorBanner'
 import { Shell, type NavKey } from './components/Shell'
 import { DEFAULT_PREFS, hasLocation, toRequest, type Preferences } from './prefs'
 import { ClarifyScreen } from './screens/ClarifyScreen'
-import { DetailScreen } from './screens/DetailScreen'
+import { DetailScreen, type UserLocation } from './screens/DetailScreen'
+import { NavigationScreen } from './screens/NavigationScreen'
 import { LoadingScreen } from './screens/LoadingScreen'
 import { LocationScreen } from './screens/LocationScreen'
 import { PreferencesScreen } from './screens/PreferencesScreen'
 import { ResultsScreen } from './screens/ResultsScreen'
-import { isClarification, type DayPlan } from './types'
+import { buildSegments } from './nav'
+import { isClarification, type ApproachRoute, type DayPlan } from './types'
 
 type View =
   | { name: 'location' }
@@ -19,6 +21,7 @@ type View =
   | { name: 'error'; error: ApiError }
   | { name: 'results' }
   | { name: 'detail'; index: number }
+  | { name: 'navigate'; index: number; approach: ApproachRoute }
 
 function errorCopy(error: ApiError): { title: string; message: string } {
   if (error.status === 0) return { title: 'Sunucuya ulaşılamadı', message: 'Bağlantınızı kontrol edip tekrar deneyin.' }
@@ -36,6 +39,7 @@ const TITLES: Record<View['name'], string> = {
   error: 'Günlük Planlar',
   results: 'Günlük Planlar',
   detail: 'Plan Detayı',
+  navigate: 'Navigasyon',
 }
 
 const NAV_FOR: Record<View['name'], NavKey> = {
@@ -46,6 +50,7 @@ const NAV_FOR: Record<View['name'], NavKey> = {
   error: 'plans',
   results: 'plans',
   detail: 'plans',
+  navigate: 'plans',
 }
 
 export default function App() {
@@ -53,7 +58,22 @@ export default function App() {
   const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFS)
   const [plan, setPlan] = useState<DayPlan | null>(null)
   const [view, setView] = useState<View>({ name: 'location' })
+  const [userLoc, setUserLoc] = useState<UserLocation>({ status: 'idle' })
   const abort = useRef<AbortController | null>(null)
+
+  // Kullanıcının konumu yalnızca plan detayında, ilk durağa rota için istenir.
+  const requestLocation = useCallback(() => {
+    if (!navigator.geolocation) return setUserLoc({ status: 'denied' })
+    setUserLoc({ status: 'loading' })
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const coords: LatLng = { latitude: pos.coords.latitude, longitude: pos.coords.longitude }
+        setUserLoc({ status: 'ready', coords })
+      },
+      () => setUserLoc({ status: 'denied' }),
+      { timeout: 10000 },
+    )
+  }, [])
 
   const submit = useCallback(
     async (clarification?: { question: string; answer: string }) => {
@@ -98,6 +118,19 @@ export default function App() {
     window.scrollTo(0, 0)
   }, [view.name])
 
+  // Navigasyon tam ekran: üst başlık ve sekme çubuğu yok.
+  if (view.name === 'navigate' && plan) {
+    const alternative = plan.alternatives[view.index]
+    return (
+      <NavigationScreen
+        alternative={alternative}
+        planIndex={view.index}
+        segments={buildSegments(alternative, view.approach)}
+        onExit={() => setView({ name: 'detail', index: view.index })}
+      />
+    )
+  }
+
   return (
     <Shell
       title={TITLES[view.name]}
@@ -123,7 +156,16 @@ export default function App() {
         <ResultsScreen plan={plan} prefs={prefs} onOpen={(index) => setView({ name: 'detail', index })} onPrefs={toPrefs} />
       )}
       {view.name === 'detail' && plan && (
-        <DetailScreen plan={plan} index={view.index} onSelect={(index) => setView({ name: 'detail', index })} onPrefs={toPrefs} />
+        <DetailScreen
+          plan={plan}
+          index={view.index}
+          travelMode={prefs.travelMode}
+          userLoc={userLoc}
+          onRequestLocation={requestLocation}
+          onSelect={(index) => setView({ name: 'detail', index })}
+          onPrefs={toPrefs}
+          onStartNavigation={(approach) => setView({ name: 'navigate', index: view.index, approach })}
+        />
       )}
     </Shell>
   )
