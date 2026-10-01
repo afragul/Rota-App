@@ -16,6 +16,11 @@ class _ThemeSelection(BaseModel):
     themes: list[str]
 
 
+class _AmbiguityCheck(BaseModel):
+    needs_clarification: bool
+    question: str | None = None
+
+
 class PlannerServiceError(Exception):
     """LLM'den geçerli bir plan alınamadığında fırlatılır."""
 
@@ -33,6 +38,17 @@ KESİN KURALLAR:
 - Öneriler somut olsun. "Güzel vakit geçirirsiniz" gibi boş cümleler yazma.
 - Her durağın name/latitude/longitude alanlarını null bırak, bunları sen değil sistem dolduracak.
 """
+
+AMBIGUITY_SYSTEM_INSTRUCTION = """Kullanıcının serbest metni bir gün planı kurmak için
+yeterince açık mı değerlendir.
+
+Metin hiçbir somut sinyal vermiyorsa (ör. "bir şeyler yapalım") ya da açıkça
+çelişkiliyse (ör. metin "kısa bir mola" derken toplam süre saatlerce)
+needs_clarification alanını true yap ve kısa, tek cümlelik bir netleştirme sorusu
+üret. Metin zaten yeterince açıksa needs_clarification false döndür.
+
+Gereksiz yere soru sorma; şüpheye düştüğünde false'a yatkın ol, kullanıcıyı
+gereksiz turlarla yorma."""
 
 
 def _schema_instruction(model: type[BaseModel]) -> str:
@@ -67,13 +83,20 @@ def _build_prompt(
     places: list[Place],
     weather_summary: str,
 ) -> str:
+    clarification_block = ""
+    if request.previous_question and request.clarification_answer:
+        clarification_block = (
+            f"Netleştirme sorusu: {request.previous_question}\n"
+            f"Kullanıcının cevabı: {request.clarification_answer}\n"
+        )
+
     return f"""BAĞLAM
 Grup: {request.group_type.value}
 Bütçe: {request.budget.value}
 Toplam süre: {request.duration_hours} saat
 Hava durumu: {weather_summary}
 Kullanıcının isteği: {request.free_text or "belirtilmedi"}
-
+{clarification_block}
 MEKAN LİSTESİ
 {_format_places(places)}
 
@@ -190,3 +213,42 @@ async def resolve_themes(free_text: str) -> list[str]:
     # Model uydurma tema döndürebilir, süz
     themes = [t for t in selection.themes if t in THEME_TYPES]
     return themes or DEFAULT_THEMES
+
+
+async def check_ambiguity(request: PlanRequest) -> str | None:
+    """free_text belirsizse netleştirme sorusu döner, değilse None.
+
+    Kritik değil: Groq çöker/bozuk JSON dönerse None'a düşülür, orchestrator
+    doğrudan plana devam eder (resolve_themes'teki DEFAULT_THEMES deseniyle aynı).
+    """
+    settings = get_settings()
+    client = AsyncGroq(api_key=settings.groq_api_key.get_secret_value())
+
+    prompt = f"Kullanıcı isteği: {request.free_text}" + _schema_instruction(_AmbiguityCheck)
+
+    try:
+        response = await client.chat.completions.create(
+            model=settings.groq_model,
+            messages=[
+                {"role": "system", "content": AMBIGUITY_SYSTEM_INSTRUCTION},
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.2,
+        )
+    except Exception as exc:
+        logger.warning("Belirsizlik kontrolü başarısız: %s", exc)
+        return None
+
+    content = response.choices[0].message.content
+    if not content:
+        return None
+
+    try:
+        result = _AmbiguityCheck.model_validate_json(content)
+    except ValidationError:
+        return None
+
+    if result.needs_clarification and result.question:
+        return result.question
+    return None

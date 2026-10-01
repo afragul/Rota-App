@@ -5,7 +5,12 @@ import pytest
 from app.core.themes import DEFAULT_THEMES
 from app.schemas.places import Place
 from app.schemas.plan import PlanRequest
-from app.services.planner import PlannerServiceError, create_plan, resolve_themes
+from app.services.planner import (
+    PlannerServiceError,
+    check_ambiguity,
+    create_plan,
+    resolve_themes,
+)
 
 PLACES = [
     Place(
@@ -170,3 +175,47 @@ async def test_resolve_themes_hatada_varsayilana_duser(fake_groq, response):
     fake_groq(response)
 
     assert await resolve_themes("bir şey") == DEFAULT_THEMES
+
+
+# --- check_ambiguity ---
+
+
+async def test_check_ambiguity_belirsizse_soru_doner(fake_groq):
+    fake = fake_groq(json.dumps({"needs_clarification": True, "question": "Kaç kişisiniz?"}))
+
+    question = await check_ambiguity(PlanRequest(city="Bursa", free_text="bir şeyler yapalım"))
+
+    assert question == "Kaç kişisiniz?"
+    assert len(fake.calls) == 1
+
+
+async def test_check_ambiguity_netse_none_doner(fake_groq):
+    fake_groq(json.dumps({"needs_clarification": False}))
+
+    question = await check_ambiguity(
+        PlanRequest(city="Bursa", free_text="kahve içip müze gezmek istiyorum")
+    )
+
+    assert question is None
+
+
+async def test_check_ambiguity_needs_clarification_true_ama_soru_yoksa_none_doner(fake_groq):
+    fake_groq(json.dumps({"needs_clarification": True, "question": None}))
+
+    question = await check_ambiguity(PlanRequest(city="Bursa", free_text="bir şeyler yapalım"))
+
+    assert question is None
+
+
+@pytest.mark.parametrize(
+    "response",
+    [RuntimeError("groq çöktü"), None, "json değil", '{"needs_clarification": "evet"}'],
+    ids=["groq-hatasi", "bos-yanit", "bozuk-json", "sema-disi"],
+)
+async def test_check_ambiguity_hatada_none_doner_plana_devam_edilir(fake_groq, response):
+    """Belirsizlik kontrolü kritik değil: her hatada None dönüp plana devam edilmeli."""
+    fake_groq(response)
+
+    question = await check_ambiguity(PlanRequest(city="Bursa", free_text="bir şeyler yapalım"))
+
+    assert question is None

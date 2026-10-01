@@ -32,7 +32,7 @@ class Settings(BaseSettings):
 
     # --- LLM ---
     groq_api_key: SecretStr
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-120b"
 
     # Tüm dış çağrılar için ortak zaman aşımı (saniye)
     http_timeout: float = 10.0

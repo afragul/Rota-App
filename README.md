@@ -30,10 +30,10 @@ Backend'in çekirdeği çalışır durumda. Aşağıdakiler **hazır**:
 - Duraklar arası mesafe/süre/harita çizgisi, ulaşım şekli kullanıcı seçimli: yürüyüş, toplu taşıma, araba (Google Routes API, `PlanAlternative.legs`)
 - Hava durumu + mekân havuzundan Groq ile alternatifli gün planı üretimi
 - Serbest metinden tema çözümleme (kullanıcı "ne istediğini" yazınca uygun temalara eşleme)
+- Serbest metin belirsiz/çelişkiliyse (ör. "bir şeyler yapalım") LLM doğrudan plan yerine bir netleştirme sorusu döndürür (`app/services/planner.py::check_ambiguity`); aynı `POST /plan`, istemci `previous_question`/`clarification_answer` alanlarıyla cevabı geri gönderince bir tur sonra plana devam edilir. Backend stateless kalır — sunucu tarafında konuşma geçmişi tutulmaz.
 
 Henüz **yapılmadı** (yol haritasında, bkz. `ROADMAP.md`):
 
-- Yapay zekânın eksik/belirsiz bilgi olduğunda kullanıcıya soru sorabilmesi (çok turlu diyalog)
 - Adım adım yol tarifi (rota çizgisi hazır, talimat metinleri yok)
 - Frontend / mobil arayüz
 
@@ -71,7 +71,7 @@ cp .env.example .env
 | `GROQ_API_KEY` | evet | Groq API anahtarı ([console.groq.com](https://console.groq.com)) |
 | `GOOGLE_PLACES_BASE_URL` | hayır | Varsayılan: `https://places.googleapis.com/v1` |
 | `GOOGLE_GEOCODING_BASE_URL` | hayır | Varsayılan: `https://maps.googleapis.com/maps/api/geocode/json` |
-| `GROQ_MODEL` | hayır | Varsayılan: `llama-3.3-70b-versatile` |
+| `GROQ_MODEL` | hayır | Varsayılan: `openai/gpt-oss-120b`. Hangi modellerin erişilebilir olduğu hesap/tier'a göre değişir (bkz. `console.groq.com/docs/models`). |
 | `HTTP_TIMEOUT` | hayır | Dış servis çağrıları için saniye cinsinden zaman aşımı (varsayılan `10.0`) |
 | `APP_NAME` | hayır | Varsayılan: `Rota App` |
 | `DEBUG` | hayır | Varsayılan: `false` |
@@ -100,7 +100,7 @@ pytest
 | `GET` | `/weather` | Verilen koordinat için anlık hava durumu |
 | `GET` | `/places/nearby` | Verilen koordinat ve türlere göre yakındaki mekânlar |
 | `GET` | `/geocode` | Şehir/adres metnini koordinata çevirir |
-| `POST` | `/plan` | Konum, süre, bütçe, grup tipi ve tema/serbest metin tercihlerinden alternatif gün planları üretir |
+| `POST` | `/plan` | Konum, süre, bütçe, grup tipi ve tema/serbest metin tercihlerinden alternatif gün planları üretir (serbest metin belirsizse önce netleştirme sorusu döner) |
 
 ### `POST /plan` örnek istek
 
@@ -130,3 +130,26 @@ Koordinatla:
 ```
 
 `latitude`+`longitude` ikilisi veya `city` alanlarından biri zorunlu; hiçbiri verilmezse istek 422 ile reddedilir. `categories` (örn. `["yemek", "kafe", "tarihi"]`) ile `free_text` birlikte de kullanılabilir; `categories` verilmişse öncelik onda, hiçbiri verilmezse varsayılan temalar (`yemek`, `kafe`, `tarihi`) kullanılır.
+
+### Netleştirme turu (belirsiz `free_text`)
+
+`categories` verilmemişse ve `free_text` yeterince açık değilse `POST /plan`, `DayPlan` yerine bir soru döner:
+
+```json
+{
+  "question": "Kaç kişi olacaksınız?"
+}
+```
+
+İstemci soruyu gösterir, kullanıcının cevabını alır ve aynı isteği `previous_question`/`clarification_answer` ekleyerek tekrar gönderir:
+
+```json
+{
+  "city": "Bursa",
+  "free_text": "bir şeyler yapalım",
+  "previous_question": "Kaç kişi olacaksınız?",
+  "clarification_answer": "4 kişiyiz"
+}
+```
+
+Bu ikinci istek her zaman normal `DayPlan` döner — belirsizlik kontrolü bir kez yapılır, tekrar sorulmaz. Sunucu tarafında bir konuşma geçmişi tutulmaz; bu iki alanı geri göndermek istemcinin sorumluluğundadır.

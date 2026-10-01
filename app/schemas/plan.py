@@ -44,6 +44,19 @@ class PlanRequest(BaseModel):
     categories: list[str] | None = None
     free_text: str | None = None
 
+    # Netleştirme turu: bir önceki /plan cevabı ClarificationNeeded ise, istemci
+    # soruyu ve kullanıcının cevabını bu iki alanla geri gönderir. Sunucu
+    # tarafında oturum/state tutulmuyor (bkz. ROADMAP.md Milestone 2).
+    previous_question: str | None = Field(
+        default=None,
+        description="Bir önceki /plan çağrısında dönen netleştirme sorusu (varsa)",
+    )
+    clarification_answer: str | None = Field(
+        default=None,
+        description="Kullanıcının previous_question'a cevabı; varsa belirsizlik "
+        "kontrolü atlanır, doğrudan plana geçilir",
+    )
+
     @model_validator(mode="after")
     def _konum_verildi_mi(self) -> "PlanRequest":
         has_coords = self.latitude is not None and self.longitude is not None
@@ -102,6 +115,19 @@ class PlanAlternative(BaseModel):
             "gösterebilir. Tek duraklı planda rota gerekmediği için True kalır."
         ),
     )
+
+
+class ClarificationNeeded(BaseModel):
+    """Planlayıcı devam etmeden önce kullanıcıya netleştirme sorusu sormalı.
+
+    DayPlan'a ortak bir "status" alanı eklenmedi: DayPlan'ın şeması Groq'a
+    _schema_instruction ile gösteriliyor, ekstra bir alan LLM'in kendi status
+    değerini uydurup şema dışı yanıt vermesine yol açabilir. build_day_plan zaten
+    tipli bir instance döndürdüğü için FastAPI response_model'de union'ı
+    discriminator olmadan da doğru serialize eder.
+    """
+
+    question: str = Field(description="Kullanıcıya sorulacak netleştirici soru")
 
 
 class DayPlan(BaseModel):
