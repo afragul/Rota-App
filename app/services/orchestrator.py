@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from app.core.themes import DEFAULT_THEMES, filter_for_bad_weather, types_for
 from app.schemas.places import Place
-from app.schemas.plan import ClarificationNeeded, DayPlan, PlanRequest
+from app.schemas.plan import ClarificationNeeded, DayPlan, PlanRequest, WeatherSummary
 from app.services.geocoding import geocode_address
 from app.services.places import PlacesServiceError, search_nearby
 from app.services.planner import check_ambiguity, create_plan, resolve_themes
@@ -61,6 +61,7 @@ async def _gather_places(latitude: float, longitude: float, themes: list[str]) -
 class _WeatherContext:
     summary: str
     is_bad: bool  # yağış/fırtına -> tema havuzu indoor'a daraltılır
+    info: WeatherSummary | None = None  # None: hava alınamadı
 
 
 async def _fetch_weather_context(latitude: float, longitude: float) -> _WeatherContext:
@@ -78,6 +79,11 @@ async def _fetch_weather_context(latitude: float, longitude: float) -> _WeatherC
     return _WeatherContext(
         summary=f"{weather.temperature}°C, {weather.condition}",
         is_bad=is_bad_weather(weather.code),
+        info=WeatherSummary(
+            temperature=weather.temperature,
+            condition=weather.condition,
+            is_bad=is_bad_weather(weather.code),
+        ),
     )
 
 
@@ -128,4 +134,8 @@ async def build_day_plan(request: PlanRequest) -> DayPlan | ClarificationNeeded:
     plan = await create_plan(request, pool, weather.summary)
 
     # 5. Rota çizgisini seçilen ulaşım moduyla ekle (kritik değil, hata planı düşürmez)
-    return await add_routes(plan, request.travel_mode)
+    plan = await add_routes(plan, request.travel_mode)
+
+    plan.weather = weather.info
+    plan.weather_available = weather.info is not None
+    return plan

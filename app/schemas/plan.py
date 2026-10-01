@@ -130,6 +130,14 @@ class ClarificationNeeded(BaseModel):
     question: str = Field(description="Kullanıcıya sorulacak netleştirici soru")
 
 
+class WeatherSummary(BaseModel):
+    """UI'daki hava rozeti için özet (sistem doldurur)."""
+
+    temperature: float = Field(description="Sıcaklık, °C")
+    condition: str = Field(description='Türkçe durum, örn: "yağmurlu"')
+    is_bad: bool = Field(description="Yağış/fırtına: indoor ağırlıklı öneri yapıldı")
+
+
 class DayPlan(BaseModel):
     """LLM'in döndüreceği nihai yapı."""
 
@@ -139,6 +147,11 @@ class DayPlan(BaseModel):
             "Hava durumu bilgisi alınabildi mi. "
             "False ise plan, hava açık varsayılarak üretilmiştir."
         ),
+    )
+
+    # weather_available=False iken None
+    weather: WeatherSummary | None = Field(
+        default=None, description="Hava özeti (sistem doldurur); alınamadıysa null"
     )
 
     alternatives: list[PlanAlternative] = Field(

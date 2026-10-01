@@ -71,6 +71,7 @@ def _stop(place_id: str, order: int) -> dict:
     }
 
 
+# Model normalde 2-3 alternatif döndürür; planner tek alternatifte yeniden dener.
 PLAN_JSON = json.dumps(
     {
         "alternatives": [
@@ -79,7 +80,13 @@ PLAN_JSON = json.dumps(
                 "title": "Kafe Turu",
                 "summary": "Sakin.",
                 "stops": [_stop("p1", 1), _stop("p2", 2)],
-            }
+            },
+            {
+                "theme": "yemek",
+                "title": "Yemek Turu",
+                "summary": "Doyurucu.",
+                "stops": [_stop("p2", 1), _stop("p1", 2)],
+            },
         ]
     }
 )
@@ -133,6 +140,7 @@ async def test_mutlu_yol_sehirden_plana(fake_groq):
 
     assert routes["geocode"].called
     assert plan.weather_available is True
+    assert plan.weather is not None and plan.weather.condition == "açık"
     alt = plan.alternatives[0]
     assert [s.name for s in alt.stops] == ["Kitap Kahve", "Iskender Lokantası"]
     assert alt.routes_available is True
@@ -194,6 +202,8 @@ async def test_hava_servisi_coker_plan_yine_kurulur(fake_groq):
     plan = await build_day_plan(PlanRequest(city="Bursa", categories=["acik_hava", "kafe"]))
 
     assert "bilinmiyor" in fake.calls[0]["messages"][1]["content"]
+    assert plan.weather_available is False
+    assert plan.weather is None
     assert len(_requested_types(routes["places"])) == 2
     assert plan.alternatives
 
