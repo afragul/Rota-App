@@ -54,11 +54,17 @@ def _stop(place_id: str, order: int) -> dict:
     }
 
 
-def _plan_json(*stops: dict) -> str:
+def _plan_json(*stops: dict, alternatives: int = 2) -> str:
     return json.dumps(
         {
             "alternatives": [
-                {"theme": "kafe", "title": "Kafe Turu", "summary": "Sakin.", "stops": list(stops)}
+                {
+                    "theme": f"tema{i}",
+                    "title": f"Tur {i}",
+                    "summary": "Sakin.",
+                    "stops": list(stops),
+                }
+                for i in range(alternatives)
             ]
         }
     )
@@ -77,6 +83,26 @@ async def test_create_plan_gecerli_yanit_zenginlestirilir(fake_groq):
     assert [s.name for s in stops] == ["Kitap Kahve", "Iskender Lokantası"]
     assert stops[0].latitude == 40.1885
     assert len(fake.calls) == 1
+
+
+async def test_create_plan_tek_alternatifte_bir_kez_daha_dener(fake_groq):
+    """Model tek alternatif döndürürse yeniden denenir, daha iyi sonuç kullanılır."""
+    fake = fake_groq(_plan_json(_stop("p1", 1), alternatives=1), _plan_json(_stop("p1", 1)))
+
+    plan = await create_plan(REQUEST, PLACES, "20°C, açık")
+
+    assert len(fake.calls) == 2
+    assert len(plan.alternatives) == 2
+
+
+async def test_create_plan_hep_tek_alternatifse_ikinci_denemeden_sonra_birakir(fake_groq):
+    """Deneme sayısı sınırlı; yine tek gelirse plan hata vermeden döner."""
+    fake = fake_groq(_plan_json(_stop("p1", 1), alternatives=1))
+
+    plan = await create_plan(REQUEST, PLACES, "20°C, açık")
+
+    assert len(fake.calls) == 2
+    assert len(plan.alternatives) == 1
 
 
 async def test_create_plan_istek_dogru_kuruluyor(fake_groq):

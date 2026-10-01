@@ -34,7 +34,8 @@ KESİN KURALLAR:
 - Her durak için listedeki place_id'yi birebir kopyala.
 - Duraklar arası yürüme/ulaşım süresini hesaba kat.
 - Verilen toplam süreyi aşma.
-- Birbirinden gerçekten farklı 2-3 alternatif üret.
+- Mekan sayısı yetiyorsa TAM OLARAK 3 alternatif üret (en az 2); her biri farklı bir tema
+  ve mümkün olduğunca farklı duraklar içersin. Tek alternatif döndürme.
 - Öneriler somut olsun. "Güzel vakit geçirirsiniz" gibi boş cümleler yazma.
 - Her durağın name/latitude/longitude alanlarını null bırak, bunları sen değil sistem dolduracak.
 """
@@ -100,7 +101,7 @@ Kullanıcının isteği: {request.free_text or "belirtilmedi"}
 MEKAN LİSTESİ
 {_format_places(places)}
 
-Bu mekanlardan {request.duration_hours} saatlik alternatif planlar kur.
+Bu mekanlardan {request.duration_hours} saatlik 3 birbirinden farklı alternatif plan kur.
 """
 
 
@@ -139,12 +140,38 @@ def _validate_and_enrich_stops(plan: DayPlan, places: list[Place]) -> DayPlan:
     return plan
 
 
+MIN_ALTERNATIVES = 2
+MAX_ATTEMPTS = 2
+
+
 async def create_plan(
     request: PlanRequest,
     places: list[Place],
     weather_summary: str,
 ) -> DayPlan:
-    """Mekan havuzundan LLM ile günlük plan üretir."""
+    """Mekan havuzundan LLM ile günlük plan üretir.
+
+    Model bazen prompt'a rağmen tek alternatif döndürüyor; MIN_ALTERNATIVES'ın
+    altında kalırsa bir kez daha denenir. Yine de azsa eldeki plan döner
+    (hiç plan dönmemesinden iyidir).
+    """
+    best: DayPlan | None = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        plan = await _generate_plan(request, places, weather_summary)
+        if best is None or len(plan.alternatives) > len(best.alternatives):
+            best = plan
+        if len(best.alternatives) >= MIN_ALTERNATIVES:
+            break
+        logger.warning("Yalnızca %d alternatif geldi (deneme %d)", len(best.alternatives), attempt)
+    assert best is not None
+    return best
+
+
+async def _generate_plan(
+    request: PlanRequest,
+    places: list[Place],
+    weather_summary: str,
+) -> DayPlan:
     if not places:
         raise PlannerServiceError("Plan kurmak için mekan bulunamadı")
 
