@@ -4,9 +4,10 @@ import pytest
 
 from app.core.themes import DEFAULT_THEMES
 from app.schemas.places import Place
-from app.schemas.plan import PlanRequest
+from app.schemas.plan import DayPlan, PlanRequest
 from app.services.planner import (
     PlannerServiceError,
+    _llm_schema,
     check_ambiguity,
     create_plan,
     resolve_themes,
@@ -245,3 +246,13 @@ async def test_check_ambiguity_hatada_none_doner_plana_devam_edilir(fake_groq, r
     question = await check_ambiguity(PlanRequest(city="Bursa", free_text="bir şeyler yapalım"))
 
     assert question is None
+
+
+def test_llm_semasi_sistemin_doldurdugu_alanlari_icermez():
+    """legs/weather gibi alanlar prompt'u şişirmesin, LLM zaten üretmiyor."""
+    schema = json.dumps(_llm_schema(DayPlan))
+
+    for alan in ("legs", "routes_available", "weather", "RouteStep", "TransitDetail"):
+        assert alan not in schema
+    # LLM'in üreteceği alanlar yerinde kalmalı
+    assert "alternatives" in schema and "place_id" in schema and "recommendation" in schema

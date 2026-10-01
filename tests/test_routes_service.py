@@ -6,7 +6,7 @@ import respx
 
 from app.core.config import get_settings
 from app.schemas.plan import DayPlan, PlanAlternative, PlanStop, TravelMode
-from app.services.routes import RoutesServiceError, add_routes, get_route_legs
+from app.services.routes import RoutesServiceError, add_routes, get_approach_route, get_route_legs
 
 
 def _stop(order: int, lat: float | None = 40.0, lng: float | None = 29.0) -> PlanStop:
@@ -186,3 +186,137 @@ async def test_log_google_hata_govdesini_ve_modu_icerir(caplog):
     assert "403" in caplog.text
     assert "TRANSIT" in caplog.text
     assert "Routes API has not been used" in caplog.text
+
+
+# --- get_approach_route (kullanıcı konumu -> ilk durak) ---
+
+
+@respx.mock
+async def test_approach_route_tek_ayak_doner():
+    route = respx.post(_url()).mock(
+        return_value=httpx.Response(200, json={"routes": [{"legs": [_leg(1200, "600s", "xyz")]}]})
+    )
+
+    result = await get_approach_route((40.0, 29.0), (40.1, 29.1), TravelMode.WALK)
+
+    assert (result.distance_meters, result.duration_minutes, result.polyline) == (1200, 10, "xyz")
+    assert result.travel_mode is TravelMode.WALK
+    body = json.loads(route.calls[0].request.content)
+    assert body["origin"]["location"]["latLng"] == {"latitude": 40.0, "longitude": 29.0}
+    assert body["destination"]["location"]["latLng"] == {"latitude": 40.1, "longitude": 29.1}
+    assert body["travelMode"] == "WALK"
+
+
+@respx.mock
+async def test_approach_route_google_hata_verirse():
+    respx.post(_url()).mock(return_value=httpx.Response(403, text="kapalı"))
+
+    with pytest.raises(RoutesServiceError):
+        await get_approach_route((40.0, 29.0), (40.1, 29.1), TravelMode.DRIVE)
+
+
+@respx.mock
+async def test_approach_route_bos_sonuc():
+    respx.post(_url()).mock(return_value=httpx.Response(200, json={"routes": []}))
+
+    with pytest.raises(RoutesServiceError):
+        await get_approach_route((40.0, 29.0), (40.1, 29.1), TravelMode.TRANSIT)
+
+
+# --- adım adım tarif (steps) ---
+
+_WALK_STEP = {
+    "distanceMeters": 70,
+    "staticDuration": "77s",
+    "travelMode": "WALK",
+    "navigationInstruction": {
+        "maneuver": "TURN_RIGHT",
+        "instructions": "Mühürdar Cd. yönünde sağa dönün",
+    },
+}
+_TRANSIT_STEP = {
+    "distanceMeters": 1348,
+    "staticDuration": "138s",
+    "travelMode": "TRANSIT",
+    "navigationInstruction": {"instructions": "Metro Sabiha Gökçen üzerinden"},
+    "transitDetails": {
+        "stopDetails": {
+            "departureStop": {"name": "Kadıköy"},
+            "arrivalStop": {"name": "Ayrılık Çeşmesi"},
+        },
+        "localizedValues": {"departureTime": {"time": {"text": "14:58"}}},
+        "headsign": "Sabiha Gökçen",
+        "stopCount": 1,
+        "transitLine": {
+            "name": "Kadıköy - Tavşantepe",
+            "nameShort": "M4",
+            "color": "#e91e76",
+            "textColor": "#ffffff",
+            "vehicle": {"name": {"text": "Metro"}, "type": "SUBWAY"},
+        },
+    },
+}
+
+
+@respx.mock
+async def test_approach_route_adimlari_cozer():
+    leg = {**_leg(900, "800s", "xyz"), "steps": [_WALK_STEP, _TRANSIT_STEP]}
+    route = respx.post(_url()).mock(
+        return_value=httpx.Response(200, json={"routes": [{"legs": [leg]}]})
+    )
+
+    result = await get_approach_route((40.0, 29.0), (40.1, 29.1), TravelMode.TRANSIT)
+
+    walk, transit = result.steps
+    assert (walk.travel_mode, walk.maneuver, walk.distance_meters) == (
+        TravelMode.WALK,
+        "TURN_RIGHT",
+        70,
+    )
+    assert walk.instruction == "Mühürdar Cd. yönünde sağa dönün"
+    assert walk.transit is None
+    assert transit.travel_mode is TravelMode.TRANSIT
+    assert transit.transit.line_name == "M4"
+    assert (transit.transit.vehicle, transit.transit.departure_stop) == ("Metro", "Kadıköy")
+    assert (transit.transit.arrival_stop, transit.transit.stop_count) == ("Ayrılık Çeşmesi", 1)
+    assert transit.transit.departure_time == "14:58"
+    # Adımlar için field mask'e steps alanları istenmeli
+    assert (
+        "routes.legs.steps.navigationInstruction"
+        in route.calls[0].request.headers["X-Goog-FieldMask"]
+    )
+
+
+@respx.mock
+async def test_duraklar_arasi_ayaklar_da_adim_tasir():
+    respx.post(_url()).mock(
+        return_value=httpx.Response(
+            200, json={"routes": [{"legs": [{**_leg(500, "400s", "a"), "steps": [_WALK_STEP]}]}]}
+        )
+    )
+
+    legs = await get_route_legs([_stop(1), _stop(2)], TravelMode.WALK)
+
+    assert [s.maneuver for s in legs[0].steps] == ["TURN_RIGHT"]
+
+
+@respx.mock
+async def test_bozuk_adim_atlanir_ayak_etkilenmez():
+    """Adımlar kritik değil: biri bozuksa o atlanır, mesafe/süre/çizgi yine döner."""
+    bad = {"distanceMeters": "sayı değil", "travelMode": "WALK"}
+    leg = {**_leg(500, "400s", "a"), "steps": [bad, _WALK_STEP]}
+    respx.post(_url()).mock(return_value=httpx.Response(200, json={"routes": [{"legs": [leg]}]}))
+
+    result = await get_approach_route((40.0, 29.0), (40.1, 29.1), TravelMode.WALK)
+
+    assert result.polyline == "a"
+    assert len(result.steps) == 1
+
+
+@respx.mock
+async def test_adim_yoksa_bos_liste():
+    respx.post(_url()).mock(return_value=httpx.Response(200, json={"routes": [{"legs": [_leg()]}]}))
+
+    result = await get_approach_route((40.0, 29.0), (40.1, 29.1), TravelMode.WALK)
+
+    assert result.steps == []
