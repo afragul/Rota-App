@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import type { Theme } from '../theme'
 import { Icon } from './Icon'
 import { Logo } from './Logo'
 
@@ -10,6 +11,8 @@ interface Props {
   plansEnabled: boolean
   onNav: (key: NavKey) => void
   onBack?: () => void
+  theme: Theme
+  onToggleTheme: () => void
   children: ReactNode
 }
 
@@ -21,7 +24,7 @@ const NAV: { key: NavKey; label: string; icon: string }[] = [
 
 // Stitch ekranlarının ortak iskeleti: üstte logo + başlık, altta sekme çubuğu.
 // Tasarımdaki "Kayıtlar" sekmesi ve profil rozeti backend karşılığı olmadığı için yok.
-export function Shell({ title, nav, plansEnabled, onNav, onBack, children }: Props) {
+export function Shell({ title, nav, plansEnabled, onNav, onBack, theme, onToggleTheme, children }: Props) {
   return (
     <>
       <header className="fixed top-0 w-full z-50 bg-background/85 backdrop-blur-xl pt-safe shadow-[0_1px_8px_rgba(0,0,0,0.03)]">
@@ -47,6 +50,13 @@ export function Shell({ title, nav, plansEnabled, onNav, onBack, children }: Pro
               <h1 className="font-headline-md text-headline-md text-ink truncate leading-tight">{title}</h1>
             </div>
           </div>
+          <button
+            aria-label={theme === 'dark' ? 'Aydınlık temaya geç' : 'Koyu temaya geç'}
+            onClick={onToggleTheme}
+            className="w-10 h-10 rounded-full flex items-center justify-center text-ink hover:text-primary transition-colors flex-shrink-0"
+          >
+            <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} className="text-[22px]" />
+          </button>
         </div>
       </header>
 

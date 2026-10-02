@@ -81,8 +81,10 @@ export function NavigationScreen({ alternative, planIndex, segments: initial, on
           polyline: route.polyline,
         }
         setSegments((prev) => prev.map((s, i) => (i === index ? prepare(next) : s)))
-      } catch {
-        /* rota alınamazsa eski çizgiyle devam; bir sonraki sapmada tekrar denenir */
+      } catch (err) {
+        // Rota alınamazsa eski çizgiyle devam; bir sonraki sapmada tekrar denenir.
+        // Sebebini görebilmek için konsola logluyoruz (kullanıcıya gösterilmiyor).
+        console.error('Yeniden rota hesaplanamadı:', err)
       } finally {
         reroutingRef.current = false
         setRerouting(false)
@@ -143,9 +145,16 @@ export function NavigationScreen({ alternative, planIndex, segments: initial, on
         onUserPan={() => setFollow(false)}
       />
 
-      {/* Üst: şimdi ne yapılacak */}
+      {/* Üst: geri/kapat + şimdi ne yapılacak */}
       <div className="absolute top-0 inset-x-0 z-10 pt-safe">
         <div className="max-w-md mx-auto p-space-md flex flex-col gap-space-sm">
+          <button
+            onClick={onExit}
+            aria-label="Navigasyonu kapat"
+            className="w-10 h-10 rounded-full bg-surface shadow-lg flex items-center justify-center text-ink self-start"
+          >
+            <Icon name="arrow_back" className="text-[22px]" />
+          </button>
           {arrived ? (
             <div className="bg-success text-white rounded-2xl p-space-md shadow-lg flex items-center gap-space-md" role="status">
               <Icon name="flag" fill className="text-[36px]" />

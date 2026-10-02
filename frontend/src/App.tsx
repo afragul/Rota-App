@@ -11,6 +11,7 @@ import { LocationScreen } from './screens/LocationScreen'
 import { PreferencesScreen } from './screens/PreferencesScreen'
 import { ResultsScreen } from './screens/ResultsScreen'
 import { buildSegments } from './nav'
+import { useTheme } from './theme'
 import { isClarification, type ApproachRoute, type DayPlan } from './types'
 
 type View =
@@ -60,6 +61,7 @@ export default function App() {
   const [view, setView] = useState<View>({ name: 'location' })
   const [userLoc, setUserLoc] = useState<UserLocation>({ status: 'idle' })
   const abort = useRef<AbortController | null>(null)
+  const [theme, toggleTheme] = useTheme()
 
   // Kullanıcının konumu yalnızca plan detayında, ilk durağa rota için istenir.
   const requestLocation = useCallback(() => {
@@ -138,6 +140,8 @@ export default function App() {
       plansEnabled={plan !== null}
       onNav={onNav}
       onBack={view.name === 'detail' ? () => setView({ name: 'results' }) : undefined}
+      theme={theme}
+      onToggleTheme={toggleTheme}
     >
       {view.name === 'location' && (
         <LocationScreen
