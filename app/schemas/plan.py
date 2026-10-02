@@ -2,6 +2,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.schemas.places import Place
+
 
 class BudgetLevel(StrEnum):
     LOW = "low"
@@ -148,6 +150,25 @@ class ApproachRoute(BaseModel):
     )
 
 
+class LegStop(BaseModel):
+    """Ayakları yeniden hesaplamak için gereken minimum durak bilgisi."""
+
+    order: int
+    latitude: float
+    longitude: float
+
+
+class LegsRequest(BaseModel):
+    """Kullanıcı bir durağı silip/sırasını değiştirip ayakları yeniden istediğinde."""
+
+    stops: list[LegStop]
+    travel_mode: TravelMode = TravelMode.WALK
+
+
+class LegsResponse(BaseModel):
+    legs: list[RouteLeg]
+
+
 class PlanAlternative(BaseModel):
     """Tek bir temalı gün planı."""
 
@@ -209,3 +230,8 @@ class DayPlan(BaseModel):
     alternatives: list[PlanAlternative] = Field(
         description="Birbirinden farklı 2-3 alternatif plan"
     )
+
+    # LLM üretmez; orchestrator doldurur (bkz. legs/weather). Plan kurulurken
+    # çekilen tüm mekan havuzu (seçilenler dahil) — frontend durak
+    # değiştirirken buradan seçer, yeni bir Places çağrısı yapmaz.
+    place_pool: list[Place] = Field(default_factory=list)

@@ -132,6 +132,8 @@ async def build_day_plan(request: PlanRequest) -> DayPlan | ClarificationNeeded:
 
     # 4. Planı kur
     plan = await create_plan(request, pool, weather.summary)
+    # Havuzu da döndür: frontend durak değiştirirken (ücretsiz) buradan seçer.
+    plan.place_pool = pool
 
     # 5. Rota çizgisini seçilen ulaşım moduyla ekle (kritik değil, hata planı düşürmez)
     plan = await add_routes(plan, request.travel_mode)

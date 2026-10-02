@@ -21,7 +21,9 @@ Sistem bu tercihlere göre:
 
 ## Şu anki durum
 
-Backend'in çekirdeği çalışır durumda. Aşağıdakiler **hazır**:
+### Backend
+
+Çekirdek çalışır durumda. Aşağıdakiler **hazır**:
 
 - Konum bazlı mekân arama (Google Places "New" API)
 - Anlık hava durumu (Open-Meteo)
@@ -29,13 +31,24 @@ Backend'in çekirdeği çalışır durumda. Aşağıdakiler **hazır**:
 - Hava durumuna göre kural bazlı indoor/outdoor daraltma: yağış/fırtına kodlarında sadece açık havada anlamlı temalar (`acik_hava`) mekan aramasından önce elenir, iyi havada karma kalır (`app/core/themes.py::filter_for_bad_weather`, `app/services/weather.py::is_bad_weather`)
 - Duraklar arası mesafe/süre/harita çizgisi ve **adım adım tarif** (Türkçe talimat; toplu taşımada hat/durak bilgisi), ulaşım şekli kullanıcı seçimli: yürüyüş, toplu taşıma, araba (Google Routes API, `PlanAlternative.legs[].steps`)
 - Kullanıcının konumundan ilk durağa rota (`POST /route/approach`) ve frontend'de canlı navigasyon modu ("Rotayı Başlat"): konum plan çıktıktan sonra, plan detayında istenir
+- Durak sırası/listesi değiştiğinde ayakları yeniden hesaplama (`POST /route/legs`) — frontend'de durak silme/sıralama/değiştirme için kullanılır
 - Hava durumu + mekân havuzundan Groq ile alternatifli gün planı üretimi
 - Serbest metinden tema çözümleme (kullanıcı "ne istediğini" yazınca uygun temalara eşleme)
 - Serbest metin belirsiz/çelişkiliyse (ör. "bir şeyler yapalım") LLM doğrudan plan yerine bir netleştirme sorusu döndürür (`app/services/planner.py::check_ambiguity`); aynı `POST /plan`, istemci `previous_question`/`clarification_answer` alanlarıyla cevabı geri gönderince bir tur sonra plana devam edilir. Backend stateless kalır — sunucu tarafında konuşma geçmişi tutulmaz.
+- Plan kurulurken çekilen mekan havuzu (`DayPlan.place_pool`) tamamen yanıta dahil edilir — frontend'in durak değiştirme/ekleme özelliği bu havuzu yeniden kullanır, ek bir Google çağrısı yapmaz.
 
-Henüz **yapılmadı** (yol haritasında, bkz. `ROADMAP.md`):
+### Frontend
 
-- Frontend / mobil arayüz
+`frontend/` içinde Vite + React + TypeScript + Tailwind, Leaflet ile harita. **Hazır**:
+
+- Konum/tercih seçimi, sonuç ve plan detayı ekranları; açık/koyu tema anahtarı
+- Canlı navigasyon modu, plan detayında durakları sil/sırala/değiştir/taşı/ekle
+- **Supabase Auth** (tamamen frontend'de, backend'den bağımsız): giriş opsiyonel (misafir modu var), kayıt/giriş/şifremi unuttum, kullanıcı adı
+- Rota kaydetme/favorileme ve link ile paylaşım (Supabase `saved_plans` tablosu — bkz. "Frontend kurulumu")
+
+Henüz **yapılmadı** (yol haritasında, bkz. `ROADMAP.md`'nin "Sırada / fikir aşamasında" bölümü):
+
+- Mekan fotoğrafı/yorumları, mekan bazlı favorileme, sık gidilenler, profil fotoğrafı, backend'in Supabase JWT doğrulaması
 
 ## Teknoloji yığını
 
@@ -101,6 +114,8 @@ pytest
 | `GET` | `/places/nearby` | Verilen koordinat ve türlere göre yakındaki mekânlar |
 | `GET` | `/geocode` | Şehir/adres metnini koordinata çevirir |
 | `POST` | `/plan` | Konum, süre, bütçe, grup tipi ve tema/serbest metin tercihlerinden alternatif gün planları üretir (serbest metin belirsizse önce netleştirme sorusu döner) |
+| `POST` | `/route/approach` | Kullanıcının konumundan verilen noktaya (genelde ilk durak) tek ayaklık rota |
+| `POST` | `/route/legs` | Verilen durak listesi (sıra + koordinat) için ardışık ayakları yeniden hesaplar — durak silindiğinde/sırası değiştiğinde kullanılır |
 
 ### `POST /plan` örnek istek
 
@@ -153,3 +168,48 @@ Koordinatla:
 ```
 
 Bu ikinci istek her zaman normal `DayPlan` döner — belirsizlik kontrolü bir kez yapılır, tekrar sorulmaz. Sunucu tarafında bir konuşma geçmişi tutulmaz; bu iki alanı geri göndermek istemcinin sorumluluğundadır.
+
+## Frontend kurulumu
+
+```bash
+cd frontend
+npm install
+cp .env.example .env
+```
+
+`frontend/.env` içine Supabase proje bilgilerini yaz (Supabase Dashboard →
+Project Settings → API):
+
+| Değişken | Açıklama |
+| --- | --- |
+| `VITE_SUPABASE_URL` | Supabase proje URL'i |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon/public key (RLS ile korunur) |
+
+Hesap/favoriler özelliği için Supabase projende **SQL Editor**'de şu tabloları
+oluşturman gerekiyor (bir kerelik):
+
+- `profiles` (kullanıcı adı; `auth.users` insert'inde trigger otomatik satır açar)
+- `saved_plans` (kaydedilen/favorilenen rotalar, link ile paylaşım)
+
+İkisi de RLS açık; `profiles` herkese okunabilir/sahibi güncelleyebilir,
+`saved_plans` herkese okunabilir (gizlilik modeli linkteki tahmin edilemeyen
+uuid) ama sadece sahibi silebilir. Tam SQL script'i proje geçmişinde
+(bu özelliği ekleyen commit) veya Supabase Dashboard'daki tablo şemalarından
+görülebilir.
+
+Dev server'ı çalıştır:
+
+```bash
+npm run dev
+```
+
+Vite `http://localhost:5173`'te açılır, `/api/*` istekleri backend'e
+(`http://localhost:8000`) proxy'lenir (bkz. `frontend/vite.config.ts`) —
+backend'in de ayrıca `fastapi dev app/main.py` ile ayakta olması gerekir.
+
+Lint ve tip kontrolü:
+
+```bash
+npm run lint
+npx tsc -b --noEmit
+```

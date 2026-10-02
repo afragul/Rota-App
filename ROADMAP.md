@@ -34,7 +34,63 @@ DESIGN.md'deki ekranlara birebir karşılık gelir.
 - [ ] Plan detay ekranı — durak zaman çizelgesi + harita (Milestone 1'deki rota verisine bağlı).
 - [ ] Hata/boş durum ekranları (mekân bulunamadı, plan üretilemedi, hava alınamadı).
 
+## İnovasyon — Hesap, favoriler ve rota düzenleme
+
+Backend'e dokunmadan (auth tamamen frontend+Supabase'de) başlayıp, durak
+düzenlemeyle backend'e geri dönen bir seri. Hepsi ücretsiz kalacak şekilde
+tasarlandı: yeni Google Places/LLM çağrısı yok, zaten çekilen veriyi yeniden
+kullanıyor.
+
+- [x] **Supabase Auth**: giriş opsiyonel (misafir modu kalıyor) — kayıt,
+  giriş, şifremi unuttum/sıfırlama (`frontend/src/auth.ts`,
+  `screens/AccountScreen.tsx`). Backend bundan habersiz, kullanıcı kimliği
+  hiçbir endpoint'te doğrulanmıyor.
+- [x] **Kullanıcı adı**: `profiles` tablosu, `auth.users` insert'inde
+  `SECURITY DEFINER` trigger ile otomatik satır (signUp'ın `options.data`
+  metadata'sından); sonradan Hesabım'dan değiştirilebilir. Kısıtlama yok,
+  sadece emoji yasak.
+- [x] **Açık/koyu tema anahtarı**: `data-theme` + `localStorage`, sistem
+  ayarını ezebiliyor (`frontend/src/theme.ts`).
+- [x] **Rota kaydetme/favorileme + link ile paylaşım**: `saved_plans`
+  tablosu (RLS: herkes okuyabilir — gizlilik modeli linkteki uuid, sahibi
+  silebilir). Yıldız butonu toggle (bas→kaydet, tekrar bas→sil).
+  `SharedPlanScreen.tsx` linki açanı (giriş yapmamış olsa da) salt-okunur
+  gösterir; mobilde `navigator.share` ile WhatsApp vb.'ye doğrudan paylaşım.
+- [x] **Durak sil/sırala**: `POST /route/legs` (`app/api/routes/route.py`,
+  mevcut `get_route_legs` servisini yeniden kullanır) — herhangi bir durak
+  sırası için ayakları (mesafe/süre/çizgi) yeniden hesaplar.
+- [x] **Durak değiştir/taşı/ekle**: `DayPlan.place_pool` plan kurulurken
+  çekilen ama kullanılmayan mekan havuzunu döndürür (`orchestrator.py`) —
+  yeni bir Places çağrısı yok. Frontend'de kategoriye göre filtreleyip
+  (`THEME_TYPES` mirror'ı) durak değiştirme, planlar arası durak taşıma/alma,
+  havuzdan/başka plandan yeni durak ekleme (`DetailScreen.tsx::StopEditSheet`).
+- [x] **Google Maps linki**: her durağın yanında gerçek fotoğraf/yorumlar
+  için Maps'e açılan bir link (`meta.ts::mapsUrl`, sadece `place_id`'den
+  kurulur, ekstra çağrı yok).
+- [x] **"Ulaşıldı" işaretleme**: kart ve haritadaki pin soluklaşır, durak
+  silinmez.
+
+### Sırada / fikir aşamasında
+
+- [ ] **Mekan fotoğrafı/yorumları**: Google Places'te ek maliyetli
+  (fotoğraf: mekan+fotoğraf başına ayrı çağrı; yorumlar: daha pahalı bir
+  fiyat katmanı + ayrı Place Details çağrısı gerektiriyor). Ücretsiz bir
+  yol bulunursa değerlendirilecek, şu an öncelik değil.
+- [ ] **Mekan bazlı favorileme**: rota değil, tekil bir mekanı favorileme
+  (basit `user_id` + `place_id` tablosu — rota favorilemeden daha küçük bir
+  iş, bilinçli olarak sonraya bırakıldı).
+- [ ] **Sık gidilen yerler / rutin önerisi**: zamanla kullanıcının
+  ziyaret ettiği yerlerden bir "sık gidilenler" listesi çıkarma.
+- [ ] **Mekan değiştirirken AI'ya sorma**: şu an sadece kategori chip
+  filtresi var (ücretsiz); kullanıcının serbest metinle ("bunu beğenmedim,
+  daha sakin bir yer olsun" gibi) tarif etmesi ve LLM'in havuzdan/yeni
+  aramadan seçmesi — maliyet/karmaşıklık nedeniyle kapsam dışı tutuldu.
+- [ ] **Profil fotoğrafı**: Supabase Storage'da yeni bir bucket + RLS
+  policy'leri gerekiyor, henüz kurulmadı.
+- [ ] **Backend'in Supabase JWT doğrulaması**: şu an hiçbir endpoint
+  kullanıcı kimliği istemiyor; kullanıcıya özel backend mantığı gerekirse
+  (ör. plan geçmişini backend'in de görmesi) eklenecek.
+
 ## Öncelik dışı / fikir aşamasında
 
-- Plan paylaşımı (link ile paylaşma, PDF/export)
-- Kullanıcı hesabı, geçmiş planları kaydetme
+- PDF/export olarak plan paylaşımı
