@@ -52,6 +52,41 @@ Gereksiz yere soru sorma; şüpheye düştüğünde false'a yatkın ol, kullanı
 gereksiz turlarla yorma."""
 
 
+# Sistemin doldurduğu, LLM'in üretmediği alanlar: şemada göstermek hem gereksiz hem de
+# prompt token'ını şişiriyor (Groq'ta dakikalık token kotası dar).
+_SYSTEM_FILLED = {
+    "DayPlan": ["weather_available", "weather"],
+    "PlanAlternative": ["legs", "routes_available"],
+}
+
+
+def _llm_schema(model: type[BaseModel]) -> dict:
+    """JSON şemasından sistemin doldurduğu alanları (ve artık kullanılmayan tanımları) çıkarır."""
+    schema = model.model_json_schema()
+    defs = schema.get("$defs", {})
+    for name, fields in _SYSTEM_FILLED.items():
+        target = schema if schema.get("title") == name else defs.get(name)
+        if target:
+            for field in fields:
+                target.get("properties", {}).pop(field, None)
+    # Hiçbir yerden referanslanmayan tanımları at (RouteLeg, RouteStep, WeatherSummary...)
+    changed = True
+    while changed:
+        changed = False
+        text = json.dumps({k: v for k, v in schema.items() if k != "$defs"})
+        for name in list(defs):
+            referenced = f'"#/$defs/{name}"' in text or any(
+                f'"#/$defs/{name}"' in json.dumps(d) for n, d in defs.items() if n != name
+            )
+            if not referenced:
+                del defs[name]
+                changed = True
+                break
+    if not defs:
+        schema.pop("$defs", None)
+    return schema
+
+
 def _schema_instruction(model: type[BaseModel]) -> str:
     """Modelin uyması gereken JSON şemasını prompt'a gömer.
 
@@ -60,7 +95,7 @@ def _schema_instruction(model: type[BaseModel]) -> str:
     Bu yüzden şemayı prompt içinde açıkça veriyoruz; dönen JSON yine de
     Pydantic ile doğrulanıyor (ValidationError -> PlannerServiceError).
     """
-    schema = json.dumps(model.model_json_schema(), ensure_ascii=False)
+    schema = json.dumps(_llm_schema(model), ensure_ascii=False)
     return (
         "\n\nYanıtını SADECE şu JSON şemasına uyan bir JSON nesnesi olarak ver, "
         f"başka hiçbir açıklama/metin ekleme:\n{schema}"

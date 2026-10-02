@@ -84,6 +84,33 @@ class PlanStop(BaseModel):
     longitude: float | None = Field(default=None, description="Mekanın boylamı (sistem doldurur)")
 
 
+class TransitDetail(BaseModel):
+    """Toplu taşıma adımının hat/durak bilgisi (Routes API transitDetails)."""
+
+    line_name: str | None = Field(default=None, description='Hat adı/kısa adı, örn: "M4"')
+    line_color: str | None = Field(default=None, description='Hat rengi, örn: "#e91e76"')
+    line_text_color: str | None = Field(default=None, description="Hat rengi üstündeki yazı rengi")
+    vehicle: str | None = Field(default=None, description='Araç türü, örn: "Metro", "Otobüs"')
+    headsign: str | None = Field(default=None, description="Aracın gittiği yön/son durak")
+    departure_stop: str | None = Field(default=None, description="Biniş durağı")
+    arrival_stop: str | None = Field(default=None, description="İniş durağı")
+    departure_time: str | None = Field(default=None, description='Yerel kalkış saati, örn: "14:58"')
+    stop_count: int | None = Field(default=None, description="Kaç durak gidilir")
+
+
+class RouteStep(BaseModel):
+    """Bir ayağın (iki durak arası) adım adım tarif satırı."""
+
+    travel_mode: TravelMode = Field(description="Bu adımın ulaşımı (TRANSIT ayağında WALK da olur)")
+    instruction: str | None = Field(default=None, description="Türkçe talimat")
+    maneuver: str | None = Field(
+        default=None, description='Google manevra kodu, örn: "TURN_LEFT"; UI ikonu için'
+    )
+    distance_meters: int = 0
+    duration_minutes: int = Field(default=1, description="Tahmini süre, dakika (en az 1)")
+    transit: TransitDetail | None = Field(default=None, description="Yalnızca TRANSIT adımlarında")
+
+
 class RouteLeg(BaseModel):
     """İki ardışık durak arasındaki ulaşım ayağı (harita çizgisi için)."""
 
@@ -94,6 +121,31 @@ class RouteLeg(BaseModel):
     distance_meters: int = Field(description="Mesafe, metre")
     duration_minutes: int = Field(description='Tahmini süre, dakika (UI: "15 dk yürüyüş")')
     polyline: str = Field(description="Google encoded polyline; frontend decode edip çizer")
+    steps: list[RouteStep] = Field(
+        default_factory=list, description="Adım adım tarif (alınamazsa boş)"
+    )
+
+
+class ApproachRequest(BaseModel):
+    """Kullanıcının bulunduğu yerden bir noktaya (ilk durak) rota isteği."""
+
+    origin_latitude: float
+    origin_longitude: float
+    destination_latitude: float
+    destination_longitude: float
+    travel_mode: TravelMode = TravelMode.WALK
+
+
+class ApproachRoute(BaseModel):
+    """Kullanıcının konumundan ilk durağa tek ayaklık rota (order'sız RouteLeg)."""
+
+    travel_mode: TravelMode
+    distance_meters: int
+    duration_minutes: int
+    polyline: str = Field(description="Google encoded polyline; frontend decode edip çizer")
+    steps: list[RouteStep] = Field(
+        default_factory=list, description="Adım adım tarif (alınamazsa boş)"
+    )
 
 
 class PlanAlternative(BaseModel):

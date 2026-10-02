@@ -31,6 +31,27 @@ export interface PlanStop {
   longitude: number | null
 }
 
+export interface TransitDetail {
+  line_name: string | null
+  line_color: string | null
+  line_text_color: string | null
+  vehicle: string | null
+  headsign: string | null
+  departure_stop: string | null
+  arrival_stop: string | null
+  departure_time: string | null
+  stop_count: number | null
+}
+
+export interface RouteStep {
+  travel_mode: TravelMode
+  instruction: string | null
+  maneuver: string | null
+  distance_meters: number
+  duration_minutes: number
+  transit: TransitDetail | null
+}
+
 export interface RouteLeg {
   travel_mode: TravelMode
   from_order: number
@@ -38,6 +59,7 @@ export interface RouteLeg {
   distance_meters: number
   duration_minutes: number
   polyline: string
+  steps: RouteStep[]
 }
 
 export interface PlanAlternative {
@@ -69,4 +91,12 @@ export type PlanResponse = DayPlan | ClarificationNeeded
 
 export function isClarification(r: PlanResponse): r is ClarificationNeeded {
   return 'question' in r
+}
+
+export interface ApproachRoute {
+  travel_mode: TravelMode
+  distance_meters: number
+  duration_minutes: number
+  polyline: string
+  steps: RouteStep[]
 }

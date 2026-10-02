@@ -1,17 +1,28 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { fetchApproach, type LatLng } from '../api'
 import { Icon } from '../components/Icon'
 import { RouteMap } from '../components/RouteMap'
 import { TRAVEL_MODES, formatCost, formatDistance, formatHours, planStyle } from '../meta'
-import type { DayPlan } from '../types'
+import type { ApproachRoute, DayPlan, TravelMode } from '../types'
+
+export type UserLocation =
+  | { status: 'idle' | 'loading' | 'denied' }
+  | { status: 'ready'; coords: LatLng }
 
 interface Props {
   plan: DayPlan
   index: number
+  travelMode: TravelMode
+  userLoc: UserLocation
+  onRequestLocation: () => void
   onSelect: (index: number) => void
   onPrefs: () => void
+  onStartNavigation: (approach: ApproachRoute) => void
 }
 
-export function DetailScreen({ plan, index, onSelect, onPrefs }: Props) {
+type Approach = { state: 'idle' } | { state: 'loading' } | { state: 'error' } | { state: 'ready'; route: ApproachRoute }
+
+export function DetailScreen({ plan, index, travelMode, userLoc, onRequestLocation, onSelect, onPrefs, onStartNavigation }: Props) {
   const alt = plan.alternatives[index]
   const s = planStyle(index)
   const stops = [...alt.stops].sort((a, b) => a.order - b.order)
@@ -20,6 +31,33 @@ export function DetailScreen({ plan, index, onSelect, onPrefs }: Props) {
   const [arrived, setArrived] = useState<Set<number>>(new Set())
   const [shared, setShared] = useState(false)
   const w = plan.weather
+
+  // Konum plan çıkınca, ilk kez detay açıldığında istenir (başlangıçta değil).
+  useEffect(() => {
+    if (userLoc.status === 'idle') onRequestLocation()
+  }, [userLoc.status, onRequestLocation])
+
+  // Kullanıcının konumundan ilk durağa rota.
+  const first = stops.find((st) => st.latitude != null && st.longitude != null)
+  const origin = userLoc.status === 'ready' ? userLoc.coords : null
+  const dest: LatLng | null = first ? { latitude: first.latitude!, longitude: first.longitude! } : null
+  const [approach, setApproach] = useState<Approach>({ state: 'idle' })
+
+  useEffect(() => {
+    if (!origin || !dest) return
+    const controller = new AbortController()
+    setApproach({ state: 'loading' })
+    fetchApproach(origin, dest, travelMode, controller.signal)
+      .then((route) => setApproach({ state: 'ready', route }))
+      .catch((err) => {
+        if (!(err instanceof DOMException && err.name === 'AbortError')) setApproach({ state: 'error' })
+      })
+    return () => controller.abort()
+    // origin/dest nesneleri her render yeni olur; değerleri bağımlılık olarak veriyoruz
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [origin?.latitude, origin?.longitude, dest?.latitude, dest?.longitude, travelMode])
+
+  const approachRoute = approach.state === 'ready' ? approach.route : null
 
   const toggleArrived = (order: number) =>
     setArrived((prev) => {
@@ -99,11 +137,61 @@ export function DetailScreen({ plan, index, onSelect, onPrefs }: Props) {
       </div>
 
       <div className="bg-surface-container rounded-xl p-space-sm shadow-sm mb-space-xl">
-        <RouteMap alternative={alt} color={s.hex} />
+        <RouteMap alternative={alt} color={s.hex} origin={origin} approach={approachRoute} />
         {!alt.routes_available && (
           <p className="font-body-sm text-[11px] text-text-secondary text-center pt-space-xs">
             Rota çizgisi alınamadı, yalnızca duraklar gösteriliyor.
           </p>
+        )}
+      </div>
+
+      <div className="bg-surface rounded-xl p-space-md shadow-sm mb-space-lg flex flex-col gap-space-md" aria-live="polite">
+        <div className="flex items-center gap-space-sm">
+          <div className="w-9 h-9 rounded-full bg-primary-fixed/50 flex items-center justify-center shrink-0">
+            <Icon name="near_me" fill className="text-primary text-[20px]" />
+          </div>
+          <div className="flex flex-col min-w-0 flex-1">
+            <span className="font-label-md text-label-md text-ink font-semibold">
+              Konumunuzdan {first ? '1. durağa' : 'ilk durağa'}
+            </span>
+            {approach.state === 'ready' && (
+              <span className="font-body-sm text-body-sm text-text-secondary">
+                {TRAVEL_MODES[approach.route.travel_mode].emoji} {approach.route.duration_minutes} dk{' '}
+                {TRAVEL_MODES[approach.route.travel_mode].verb} ({formatDistance(approach.route.distance_meters)})
+              </span>
+            )}
+            {(userLoc.status === 'idle' || userLoc.status === 'loading' || approach.state === 'loading') && (
+              <span className="font-body-sm text-body-sm text-text-secondary">Konumunuz alınıyor, rota hesaplanıyor…</span>
+            )}
+            {userLoc.status === 'denied' && (
+              <span className="font-body-sm text-body-sm text-text-secondary">
+                Konum izni verilmedi; rotayı başlatmak için konum gerekli.
+              </span>
+            )}
+            {userLoc.status === 'ready' && approach.state === 'error' && (
+              <span className="font-body-sm text-body-sm text-text-secondary">Konumunuzdan rota alınamadı.</span>
+            )}
+          </div>
+        </div>
+        {userLoc.status === 'denied' ? (
+          <button
+            type="button"
+            onClick={onRequestLocation}
+            className="w-full h-12 rounded-xl bg-plan-a hover:bg-primary-strong text-on-primary font-label-md text-label-md flex items-center justify-center gap-space-xs"
+          >
+            <Icon name="my_location" className="text-[18px]" />
+            Konumumu Kullan
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={approach.state !== 'ready'}
+            onClick={() => approach.state === 'ready' && onStartNavigation(approach.route)}
+            className="w-full h-[52px] rounded-2xl bg-plan-a hover:bg-primary-strong text-on-primary font-label-lg text-label-lg flex items-center justify-center gap-2 shadow-sm active:scale-[0.99] transition-transform disabled:opacity-50"
+          >
+            <Icon name="navigation" fill className="text-[22px]" />
+            Rotayı Başlat
+          </button>
         )}
       </div>
 
@@ -152,7 +240,7 @@ export function DetailScreen({ plan, index, onSelect, onPrefs }: Props) {
 
               {leg && i < stops.length - 1 && (
                 <div className="relative ml-2 my-space-sm pl-4 flex items-center gap-2 py-1">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-highest text-ink font-label-sm text-label-sm">
+                  <div className="inline-flex self-start items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-highest text-ink font-label-sm text-label-sm">
                     <span aria-hidden>{TRAVEL_MODES[leg.travel_mode].emoji}</span>
                     <span>
                       {leg.duration_minutes} dk {TRAVEL_MODES[leg.travel_mode].verb} ({formatDistance(leg.distance_meters)})

@@ -1,9 +1,17 @@
 import polyline from '@mapbox/polyline'
 import L from 'leaflet'
 import { useEffect, useRef } from 'react'
-import type { PlanAlternative } from '../types'
+import type { LatLng } from '../api'
+import type { ApproachRoute, PlanAlternative } from '../types'
 
-export function RouteMap({ alternative, color }: { alternative: PlanAlternative; color: string }) {
+interface Props {
+  alternative: PlanAlternative
+  color: string
+  origin?: LatLng | null
+  approach?: ApproachRoute | null
+}
+
+export function RouteMap({ alternative, color, origin, approach }: Props) {
   const el = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -20,6 +28,26 @@ export function RouteMap({ alternative, color }: { alternative: PlanAlternative;
       const points = polyline.decode(leg.polyline) as L.LatLngTuple[]
       L.polyline(points, { color, weight: 5, opacity: 0.85 }).addTo(map)
       bounds.push(...points)
+    }
+
+    // Kullanıcının konumundan ilk durağa kesikli çizgi + "Siz" noktası
+    if (origin) {
+      const here: L.LatLngTuple = [origin.latitude, origin.longitude]
+      if (approach) {
+        const points = polyline.decode(approach.polyline) as L.LatLngTuple[]
+        L.polyline(points, { color, weight: 4, opacity: 0.7, dashArray: '2 8' }).addTo(map)
+        bounds.push(...points)
+      }
+      L.marker(here, {
+        icon: L.divIcon({
+          className: '',
+          html: '<div class="rota-me"></div>',
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+        }),
+        title: 'Konumunuz',
+      }).addTo(map)
+      bounds.push(here)
     }
 
     for (const stop of alternative.stops) {
@@ -43,7 +71,7 @@ export function RouteMap({ alternative, color }: { alternative: PlanAlternative;
     return () => {
       map.remove()
     }
-  }, [alternative, color])
+  }, [alternative, color, origin, approach])
 
   return <div ref={el} className="w-full h-44 rounded-lg overflow-hidden z-0" role="img" aria-label="Durakları ve rotayı gösteren harita" />
 }

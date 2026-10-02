@@ -1,4 +1,4 @@
-import type { PlanRequest, PlanResponse } from './types'
+import type { ApproachRoute, PlanRequest, PlanResponse, TravelMode } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -32,5 +32,33 @@ export async function createPlan(request: PlanRequest, signal?: AbortSignal): Pr
     }
     throw new ApiError(response.status, detail)
   }
+  return response.json()
+}
+
+export interface LatLng {
+  latitude: number
+  longitude: number
+}
+
+// Kullanıcının konumundan ilk durağa rota (plan çıktıktan sonra çağrılır).
+export async function fetchApproach(
+  origin: LatLng,
+  destination: LatLng,
+  travelMode: TravelMode,
+  signal?: AbortSignal,
+): Promise<ApproachRoute> {
+  const response = await fetch('/api/route/approach', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      origin_latitude: origin.latitude,
+      origin_longitude: origin.longitude,
+      destination_latitude: destination.latitude,
+      destination_longitude: destination.longitude,
+      travel_mode: travelMode,
+    }),
+    signal,
+  })
+  if (!response.ok) throw new ApiError(response.status, 'Konumunuzdan rota alınamadı')
   return response.json()
 }

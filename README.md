@@ -27,14 +27,14 @@ Backend'in çekirdeği çalışır durumda. Aşağıdakiler **hazır**:
 - Anlık hava durumu (Open-Meteo)
 - Şehir/adres adından koordinat çözümleme (Google Geocoding API) — `/plan` isteğinde `latitude`/`longitude` yerine `city` de verilebilir
 - Hava durumuna göre kural bazlı indoor/outdoor daraltma: yağış/fırtına kodlarında sadece açık havada anlamlı temalar (`acik_hava`) mekan aramasından önce elenir, iyi havada karma kalır (`app/core/themes.py::filter_for_bad_weather`, `app/services/weather.py::is_bad_weather`)
-- Duraklar arası mesafe/süre/harita çizgisi, ulaşım şekli kullanıcı seçimli: yürüyüş, toplu taşıma, araba (Google Routes API, `PlanAlternative.legs`)
+- Duraklar arası mesafe/süre/harita çizgisi ve **adım adım tarif** (Türkçe talimat; toplu taşımada hat/durak bilgisi), ulaşım şekli kullanıcı seçimli: yürüyüş, toplu taşıma, araba (Google Routes API, `PlanAlternative.legs[].steps`)
+- Kullanıcının konumundan ilk durağa rota (`POST /route/approach`) ve frontend'de canlı navigasyon modu ("Rotayı Başlat"): konum plan çıktıktan sonra, plan detayında istenir
 - Hava durumu + mekân havuzundan Groq ile alternatifli gün planı üretimi
 - Serbest metinden tema çözümleme (kullanıcı "ne istediğini" yazınca uygun temalara eşleme)
 - Serbest metin belirsiz/çelişkiliyse (ör. "bir şeyler yapalım") LLM doğrudan plan yerine bir netleştirme sorusu döndürür (`app/services/planner.py::check_ambiguity`); aynı `POST /plan`, istemci `previous_question`/`clarification_answer` alanlarıyla cevabı geri gönderince bir tur sonra plana devam edilir. Backend stateless kalır — sunucu tarafında konuşma geçmişi tutulmaz.
 
 Henüz **yapılmadı** (yol haritasında, bkz. `ROADMAP.md`):
 
-- Adım adım yol tarifi (rota çizgisi hazır, talimat metinleri yok)
 - Frontend / mobil arayüz
 
 ## Teknoloji yığını
