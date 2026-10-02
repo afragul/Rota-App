@@ -77,10 +77,22 @@ export interface WeatherSummary {
   is_bad: boolean
 }
 
+export interface Place {
+  place_id: string
+  name: string
+  address: string | null
+  latitude: number
+  longitude: number
+  rating: number | null
+  user_rating_count: number | null
+  types: string[]
+}
+
 export interface DayPlan {
   weather_available: boolean
   weather: WeatherSummary | null
   alternatives: PlanAlternative[]
+  place_pool: Place[]
 }
 
 export interface ClarificationNeeded {

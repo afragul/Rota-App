@@ -10,6 +10,17 @@ export const THEMES = [
   { key: 'eglence', label: 'Eğlence', icon: 'attractions' },
 ]
 
+// Backend app/core/themes.py::THEME_TYPES ile birebir — durak değiştirirken
+// havuzu kategoriye göre filtrelemek için (ücretsiz, Google'a yeni çağrı yok).
+export const THEME_TYPES: Record<string, string[]> = {
+  tarihi: ['historical_landmark', 'museum', 'tourist_attraction'],
+  alisveris: ['shopping_mall', 'clothing_store', 'market'],
+  kafe: ['cafe', 'bakery', 'coffee_shop'],
+  yemek: ['restaurant', 'meal_takeaway'],
+  acik_hava: ['park', 'garden', 'hiking_area'],
+  eglence: ['movie_theater', 'amusement_park', 'bowling_alley'],
+}
+
 export const GROUPS: { value: GroupType; label: string; icon: string; phrase: string }[] = [
   { value: 'solo', label: 'Tek başıma', icon: 'person', phrase: 'tek kişilik' },
   { value: 'couple', label: 'Çift', icon: 'favorite', phrase: 'çift' },
@@ -49,4 +60,11 @@ export function formatCost(tl: number): string {
 export function formatHours(minutes: number): string {
   const h = Math.round((minutes / 60) * 2) / 2
   return `${String(h).replace('.', ',')} Saat`
+}
+
+// Mekanın Google Maps sayfasına link (gerçek görseller/yorumlar için) — ekstra
+// API çağrısı gerektirmez, zaten elimizdeki place_id ile kurulur.
+export function mapsUrl(stop: { place_id: string; name: string | null; activity: string }): string {
+  const query = encodeURIComponent(stop.name ?? stop.activity)
+  return `https://www.google.com/maps/search/?api=1&query=${query}&query_place_id=${stop.place_id}`
 }

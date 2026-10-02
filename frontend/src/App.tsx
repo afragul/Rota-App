@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, createPlan, type LatLng } from './api'
+import { useAuth } from './auth'
 import { ErrorBanner } from './components/ErrorBanner'
 import { Shell, type NavKey } from './components/Shell'
 import { DEFAULT_PREFS, hasLocation, toRequest, type Preferences } from './prefs'
+import { AccountScreen } from './screens/AccountScreen'
 import { ClarifyScreen } from './screens/ClarifyScreen'
 import { DetailScreen, type UserLocation } from './screens/DetailScreen'
 import { NavigationScreen } from './screens/NavigationScreen'
@@ -10,6 +12,7 @@ import { LoadingScreen } from './screens/LoadingScreen'
 import { LocationScreen } from './screens/LocationScreen'
 import { PreferencesScreen } from './screens/PreferencesScreen'
 import { ResultsScreen } from './screens/ResultsScreen'
+import { SharedPlanScreen } from './screens/SharedPlanScreen'
 import { buildSegments } from './nav'
 import { useTheme } from './theme'
 import { isClarification, type ApproachRoute, type DayPlan } from './types'
@@ -23,6 +26,7 @@ type View =
   | { name: 'results' }
   | { name: 'detail'; index: number }
   | { name: 'navigate'; index: number; approach: ApproachRoute }
+  | { name: 'account'; from: View }
 
 function errorCopy(error: ApiError): { title: string; message: string } {
   if (error.status === 0) return { title: 'Sunucuya ulaşılamadı', message: 'Bağlantınızı kontrol edip tekrar deneyin.' }
@@ -41,9 +45,10 @@ const TITLES: Record<View['name'], string> = {
   results: 'Günlük Planlar',
   detail: 'Plan Detayı',
   navigate: 'Navigasyon',
+  account: 'Hesabım',
 }
 
-const NAV_FOR: Record<View['name'], NavKey> = {
+const NAV_FOR: Record<View['name'], NavKey | null> = {
   location: 'discover',
   prefs: 'preferences',
   clarify: 'preferences',
@@ -52,6 +57,7 @@ const NAV_FOR: Record<View['name'], NavKey> = {
   results: 'plans',
   detail: 'plans',
   navigate: 'plans',
+  account: null,
 }
 
 export default function App() {
@@ -62,6 +68,15 @@ export default function App() {
   const [userLoc, setUserLoc] = useState<UserLocation>({ status: 'idle' })
   const abort = useRef<AbortController | null>(null)
   const [theme, toggleTheme] = useTheme()
+  const { session, recovery, clearRecovery } = useAuth()
+  const [sharedId, setSharedId] = useState(() => new URLSearchParams(window.location.search).get('shared'))
+  // Kaydedilenler listesinden bir rota görüntülenip (silinip) dönüldüğünde Hesabım'ı yeniden yükletir.
+  const [accountKey, setAccountKey] = useState(0)
+
+  // Şifre sıfırlama e-postasındaki linkle geri dönüldüğünde hesap ekranı otomatik açılsın.
+  useEffect(() => {
+    if (recovery) setView((v) => (v.name === 'account' ? v : { name: 'account', from: v }))
+  }, [recovery])
 
   // Kullanıcının konumu yalnızca plan detayında, ilk durağa rota için istenir.
   const requestLocation = useCallback(() => {
@@ -110,6 +125,8 @@ export default function App() {
     setView({ name: 'prefs' })
   }
 
+  const openAccount = () => setView({ name: 'account', from: view })
+
   const onNav = (key: NavKey) => {
     if (key === 'discover') setView({ name: 'location' })
     else if (key === 'preferences') toPrefs()
@@ -119,6 +136,21 @@ export default function App() {
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [view.name])
+
+  // Link ile paylaşılan bir rota: Shell/view state machine'in tamamen dışında, bağımsız sayfa.
+  if (sharedId) {
+    return (
+      <SharedPlanScreen
+        planId={sharedId}
+        session={session}
+        onClose={() => {
+          window.history.replaceState(null, '', window.location.pathname)
+          setSharedId(null)
+          setAccountKey((k) => k + 1)
+        }}
+      />
+    )
+  }
 
   // Navigasyon tam ekran: üst başlık ve sekme çubuğu yok.
   if (view.name === 'navigate' && plan) {
@@ -139,9 +171,17 @@ export default function App() {
       nav={NAV_FOR[view.name]}
       plansEnabled={plan !== null}
       onNav={onNav}
-      onBack={view.name === 'detail' ? () => setView({ name: 'results' }) : undefined}
+      onBack={
+        view.name === 'detail'
+          ? () => setView({ name: 'results' })
+          : view.name === 'account'
+            ? () => setView(view.from)
+            : undefined
+      }
       theme={theme}
       onToggleTheme={toggleTheme}
+      loggedIn={session !== null}
+      onAccount={openAccount}
     >
       {view.name === 'location' && (
         <LocationScreen
@@ -169,7 +209,25 @@ export default function App() {
           onSelect={(index) => setView({ name: 'detail', index })}
           onPrefs={toPrefs}
           onStartNavigation={(approach) => setView({ name: 'navigate', index: view.index, approach })}
+          session={session}
+          onRequireAccount={openAccount}
+          onAlternativesChange={(patches) =>
+            setPlan((p) =>
+              p
+                ? {
+                    ...p,
+                    alternatives: p.alternatives.map((a, i) => {
+                      const patch = patches.find((x) => x.index === i)
+                      return patch ? { ...a, stops: patch.stops, legs: patch.legs, routes_available: patch.routesAvailable } : a
+                    }),
+                  }
+                : p,
+            )
+          }
         />
+      )}
+      {view.name === 'account' && (
+        <AccountScreen key={accountKey} session={session} recovery={recovery} onRecoveryDone={clearRecovery} onOpenSaved={setSharedId} />
       )}
     </Shell>
   )

@@ -1,13 +1,22 @@
+import type { Session } from '@supabase/supabase-js'
 import { useEffect, useState } from 'react'
-import { fetchApproach, type LatLng } from '../api'
+import { fetchApproach, fetchLegs, type LatLng } from '../api'
 import { Icon } from '../components/Icon'
 import { RouteMap } from '../components/RouteMap'
-import { TRAVEL_MODES, formatCost, formatDistance, formatHours, planStyle } from '../meta'
-import type { ApproachRoute, DayPlan, TravelMode } from '../types'
+import { TRAVEL_MODES, THEMES, THEME_TYPES, formatCost, formatDistance, formatHours, mapsUrl, planStyle } from '../meta'
+import { deleteSavedPlan, saveFavoritePlan } from '../savedPlans'
+import type { ApproachRoute, DayPlan, Place, PlanAlternative, PlanStop, RouteLeg, TravelMode } from '../types'
 
 export type UserLocation =
   | { status: 'idle' | 'loading' | 'denied' }
   | { status: 'ready'; coords: LatLng }
+
+export interface AlternativePatch {
+  index: number
+  stops: PlanStop[]
+  legs: RouteLeg[]
+  routesAvailable: boolean
+}
 
 interface Props {
   plan: DayPlan
@@ -18,11 +27,236 @@ interface Props {
   onSelect: (index: number) => void
   onPrefs: () => void
   onStartNavigation: (approach: ApproachRoute) => void
+  session: Session | null
+  onRequireAccount: () => void
+  onAlternativesChange: (patches: AlternativePatch[]) => void
 }
 
 type Approach = { state: 'idle' } | { state: 'loading' } | { state: 'error' } | { state: 'ready'; route: ApproachRoute }
+type FavoriteState = 'idle' | 'saving' | 'saved' | 'error'
 
-export function DetailScreen({ plan, index, travelMode, userLoc, onRequestLocation, onSelect, onPrefs, onStartNavigation }: Props) {
+function stopFromPlace(place: Place, order: number, base?: Pick<PlanStop, 'arrival_time' | 'duration_minutes' | 'estimated_cost'>): PlanStop {
+  return {
+    place_id: place.place_id,
+    order,
+    arrival_time: base?.arrival_time ?? '-',
+    duration_minutes: base?.duration_minutes ?? 60,
+    estimated_cost: base?.estimated_cost ?? 0,
+    activity: `${place.name} keşfi`,
+    recommendation: 'Detaylar için Google Maps linkine bakabilirsin.',
+    name: place.name,
+    latitude: place.latitude,
+    longitude: place.longitude,
+  }
+}
+
+async function legsFor(stops: PlanStop[], travelMode: TravelMode): Promise<{ legs: RouteLeg[]; ok: boolean }> {
+  const withCoords = stops.filter((st) => st.latitude != null && st.longitude != null)
+  if (withCoords.length < 2) return { legs: [], ok: true }
+  try {
+    const legs = await fetchLegs(
+      withCoords.map((st) => ({ order: st.order, latitude: st.latitude!, longitude: st.longitude! })),
+      travelMode,
+    )
+    return { legs, ok: legs.length > 0 }
+  } catch {
+    return { legs: [], ok: false }
+  }
+}
+
+interface StopEditSheetProps {
+  mode: 'replace' | 'add'
+  stop: PlanStop | null // mode 'replace' iken değiştirilen durak
+  pool: Place[]
+  usedIds: Set<string>
+  alternatives: PlanAlternative[]
+  currentIndex: number
+  canTransferOut: boolean
+  onPickPlace: (place: Place) => void
+  onTransferOut?: (targetIndex: number) => void
+  onTransferIn?: (fromIndex: number, stop: PlanStop) => void
+  onClose: () => void
+}
+
+// Durak değiştirme/ekleme sayfası: havuzdan (ücretsiz, kategoriye göre
+// filtrelenmiş) bir mekan seçme, ya da bir durağı başka bir alternatife
+// taşıma/başka bir alternatiften alma. Tam ekran — altta kısık kalmasın diye.
+function StopEditSheet({
+  mode,
+  stop,
+  pool,
+  usedIds,
+  alternatives,
+  currentIndex,
+  canTransferOut,
+  onPickPlace,
+  onTransferOut,
+  onTransferIn,
+  onClose,
+}: StopEditSheetProps) {
+  const [tab, setTab] = useState<'category' | 'other'>('category')
+  const [category, setCategory] = useState<string | null>(null)
+
+  const candidates = pool.filter((p) => {
+    if (usedIds.has(p.place_id)) return false
+    if (!category) return true
+    return p.types.some((t) => (THEME_TYPES[category] ?? []).includes(t))
+  })
+
+  const otherAlternatives = alternatives.filter((_, i) => i !== currentIndex)
+
+  return (
+    <div className="fixed inset-0 z-[70] bg-background overflow-y-auto">
+      <div className="max-w-md mx-auto px-margin pt-safe pb-space-lg flex flex-col w-full gap-space-md">
+        <div className="flex items-center justify-between py-space-md">
+          <div className="flex flex-col min-w-0">
+            <h3 className="font-headline-lg-mobile text-headline-lg-mobile text-ink">
+              {mode === 'replace' ? 'Durağı değiştir' : 'Durak ekle'}
+            </h3>
+            {stop && <span className="font-body-sm text-body-sm text-text-secondary truncate">{stop.name ?? stop.activity}</span>}
+          </div>
+          <button onClick={onClose} aria-label="Kapat" className="w-10 h-10 rounded-full flex items-center justify-center text-ink flex-shrink-0">
+            <Icon name="close" className="text-[22px]" />
+          </button>
+        </div>
+
+        <div className="flex gap-space-xs">
+          <button
+            type="button"
+            onClick={() => setTab('category')}
+            className={`flex-1 h-11 rounded-xl font-label-md text-label-md ${
+              tab === 'category' ? 'bg-plan-a text-on-primary' : 'bg-surface-container-low text-ink'
+            }`}
+          >
+            {mode === 'replace' ? 'Havuzdan seç' : 'Havuzdan ekle'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('other')}
+            disabled={mode === 'replace' ? !canTransferOut : otherAlternatives.length === 0}
+            className={`flex-1 h-11 rounded-xl font-label-md text-label-md disabled:opacity-40 ${
+              tab === 'other' ? 'bg-plan-a text-on-primary' : 'bg-surface-container-low text-ink'
+            }`}
+          >
+            {mode === 'replace' ? 'Başka plana taşı' : 'Başka plandan al'}
+          </button>
+        </div>
+
+        {tab === 'category' ? (
+          <div className="flex flex-col gap-space-sm">
+            <div className="flex gap-space-xs overflow-x-auto py-space-xs">
+              <button
+                type="button"
+                onClick={() => setCategory(null)}
+                className={`h-9 px-3 rounded-full flex-shrink-0 font-label-sm text-label-sm ${
+                  !category ? 'bg-ink text-background' : 'bg-surface-container-low text-ink'
+                }`}
+              >
+                Tümü
+              </button>
+              {THEMES.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setCategory(t.key)}
+                  className={`h-9 px-3 rounded-full flex-shrink-0 flex items-center gap-1 font-label-sm text-label-sm ${
+                    category === t.key ? 'bg-ink text-background' : 'bg-surface-container-low text-ink'
+                  }`}
+                >
+                  <Icon name={t.icon} className="text-[16px]" />
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            {candidates.length === 0 ? (
+              <p className="font-body-sm text-body-sm text-text-secondary py-space-md text-center">
+                Bu kategoride havuzda uygun mekan yok.
+              </p>
+            ) : (
+              <div className="flex flex-col gap-space-xs">
+                {candidates.map((p) => (
+                  <button
+                    key={p.place_id}
+                    type="button"
+                    onClick={() => onPickPlace(p)}
+                    className="text-left p-space-sm rounded-xl bg-surface-container-low hover:bg-surface-container flex flex-col"
+                  >
+                    <span className="font-label-md text-label-md text-ink">{p.name}</span>
+                    {p.rating != null && (
+                      <span className="font-body-sm text-body-sm text-text-secondary">⭐ {p.rating.toFixed(1)}</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : mode === 'replace' ? (
+          <div className="flex flex-col gap-space-xs">
+            {alternatives.map((a, i) =>
+              i === currentIndex ? null : (
+                <button
+                  key={a.title}
+                  type="button"
+                  onClick={() => onTransferOut?.(i)}
+                  className="text-left p-space-sm rounded-xl bg-surface-container-low hover:bg-surface-container flex items-center gap-space-sm"
+                >
+                  <span className={`w-2 h-2 rounded-full ${planStyle(i).bg}`} />
+                  <span className="font-label-md text-label-md text-ink">
+                    {planStyle(i).name} · {a.theme}
+                  </span>
+                </button>
+              ),
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-space-md">
+            {alternatives.map((a, i) => {
+              if (i === currentIndex) return null
+              return (
+                <div key={a.title} className="flex flex-col gap-space-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${planStyle(i).bg}`} />
+                    <span className="font-label-md text-label-md text-ink font-semibold">
+                      {planStyle(i).name} · {a.theme}
+                    </span>
+                  </div>
+                  {[...a.stops].sort((x, y) => x.order - y.order).map((st) => (
+                    <button
+                      key={st.order}
+                      type="button"
+                      onClick={() => onTransferIn?.(i, st)}
+                      disabled={a.stops.length <= 1}
+                      className="text-left p-space-sm rounded-xl bg-surface-container-low hover:bg-surface-container disabled:opacity-40 flex flex-col"
+                    >
+                      <span className="font-label-md text-label-md text-ink">{st.name ?? st.activity}</span>
+                      {a.stops.length <= 1 && (
+                        <span className="font-body-sm text-body-sm text-text-secondary">Tek durağı, taşınamaz</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export function DetailScreen({
+  plan,
+  index,
+  travelMode,
+  userLoc,
+  onRequestLocation,
+  onSelect,
+  onPrefs,
+  onStartNavigation,
+  session,
+  onRequireAccount,
+  onAlternativesChange,
+}: Props) {
   const alt = plan.alternatives[index]
   const s = planStyle(index)
   const stops = [...alt.stops].sort((a, b) => a.order - b.order)
@@ -30,7 +264,112 @@ export function DetailScreen({ plan, index, travelMode, userLoc, onRequestLocati
   const cost = stops.reduce((sum, st) => sum + st.estimated_cost, 0)
   const [arrived, setArrived] = useState<Set<number>>(new Set())
   const [shared, setShared] = useState(false)
+  const [favorite, setFavorite] = useState<FavoriteState>('idle')
+  const [savedId, setSavedId] = useState<string | null>(null)
+  const [recalculating, setRecalculating] = useState(false)
+  const [swapFor, setSwapFor] = useState<PlanStop | null>(null)
+  const [adding, setAdding] = useState(false)
   const w = plan.weather
+
+  // Sekme değişince (başka bir alternatife geçilince) önceki plana ait
+  // "kaydedildi" durumu yanlışlıkla taşınmasın.
+  useEffect(() => {
+    setSavedId(null)
+    setFavorite('idle')
+  }, [index])
+
+  // Durak silindiğinde/sırası/mekanı değiştiğinde ayakları yeniden hesaplatır;
+  // sonucu App.tsx'teki plan'a geri bildirir (tek doğruluk kaynağı orada kalır,
+  // bu ekran kendi kopyasını tutmaz — favori kaydetme/navigasyon hep güncel veriyi görsün).
+  const applyStopEdit = async (nextStops: PlanStop[]) => {
+    const renumbered = nextStops.map((st, i) => ({ ...st, order: i + 1 }))
+    setArrived(new Set())
+    setRecalculating(true)
+    const { legs, ok } = await legsFor(renumbered, travelMode)
+    onAlternativesChange([{ index, stops: renumbered, legs, routesAvailable: ok }])
+    setRecalculating(false)
+  }
+
+  const moveStop = (order: number, dir: -1 | 1) => {
+    const i = stops.findIndex((st) => st.order === order)
+    const j = i + dir
+    if (i < 0 || j < 0 || j >= stops.length) return
+    const next = [...stops]
+    ;[next[i], next[j]] = [next[j], next[i]]
+    void applyStopEdit(next)
+  }
+
+  const removeStop = (order: number) => {
+    if (stops.length <= 1) return
+    void applyStopEdit(stops.filter((st) => st.order !== order))
+  }
+
+  // Havuzdan seçilen mekanla mevcut bir durağı değiştirir.
+  const swapPlace = (place: Place) => {
+    if (!swapFor) return
+    const next = stops.map((st) => (st.order === swapFor.order ? stopFromPlace(place, st.order, st) : st))
+    setSwapFor(null)
+    void applyStopEdit(next)
+  }
+
+  // Havuzdan seçilen mekanı mevcut alternatife yeni bir durak olarak ekler.
+  const addPlace = (place: Place) => {
+    const next = [...stops, stopFromPlace(place, stops.length + 1)]
+    setAdding(false)
+    void applyStopEdit(next)
+  }
+
+  // Bir durağı `fromIndex` alternatifinden çıkarıp `toIndex` alternatifinin
+  // sonuna ekler; ikisi birden değiştiği için onAlternativesChange'e tek
+  // seferde iki patch verilir.
+  const transferStopBetween = async (fromIndex: number, stop: PlanStop, toIndex: number) => {
+    const fromAlt = plan.alternatives[fromIndex]
+    if (fromAlt.stops.length <= 1) return
+    const fromNext = fromAlt.stops.filter((st) => st.order !== stop.order).map((st, i) => ({ ...st, order: i + 1 }))
+    const toAlt = plan.alternatives[toIndex]
+    const toNext = [...toAlt.stops, stop].map((st, i) => ({ ...st, order: i + 1 }))
+    setArrived(new Set())
+    setRecalculating(true)
+    const [from, to] = await Promise.all([legsFor(fromNext, travelMode), legsFor(toNext, travelMode)])
+    onAlternativesChange([
+      { index: fromIndex, stops: fromNext, legs: from.legs, routesAvailable: from.ok },
+      { index: toIndex, stops: toNext, legs: to.legs, routesAvailable: to.ok },
+    ])
+    setRecalculating(false)
+  }
+
+  const transferOut = (targetIndex: number) => {
+    if (!swapFor) return
+    const stop = swapFor
+    setSwapFor(null)
+    void transferStopBetween(index, stop, targetIndex)
+  }
+
+  const transferIn = (fromIndex: number, stop: PlanStop) => {
+    setAdding(false)
+    void transferStopBetween(fromIndex, stop, index)
+  }
+
+  // Rotayı favoriler/favorilerden çıkarır — basit bir toggle: yıldız dolu
+  // halde kalır (kaydedildi), tekrar basınca kaydı siler ve yıldız söner.
+  const toggleFavorite = async () => {
+    if (!session) return onRequireAccount()
+    setFavorite('saving')
+    if (savedId) {
+      await deleteSavedPlan(savedId)
+      setSavedId(null)
+      setFavorite('idle')
+      return
+    }
+    const { data, error } = await saveFavoritePlan(alt, session.user.id)
+    if (error || !data) {
+      setFavorite('error')
+      setTimeout(() => setFavorite('idle'), 2000)
+      return
+    }
+    setSavedId(data.id)
+    setFavorite('idle')
+  }
 
   // Konum plan çıkınca, ilk kez detay açıldığında istenir (başlangıçta değil).
   useEffect(() => {
@@ -126,10 +465,26 @@ export function DetailScreen({ plan, index, travelMode, userLoc, onRequestLocati
               Hava bilgisi yok
             </span>
           )}
-          <span className="font-label-sm text-label-sm text-text-secondary bg-surface-container px-2.5 py-1 rounded-full">
-            Toplam {formatHours(minutes)}
-          </span>
+          <div className="flex items-center gap-space-xs">
+            <span className="font-label-sm text-label-sm text-text-secondary bg-surface-container px-2.5 py-1 rounded-full">
+              Toplam {formatHours(minutes)}
+            </span>
+            <button
+              type="button"
+              onClick={toggleFavorite}
+              disabled={favorite === 'saving'}
+              aria-label={savedId ? 'Kaydedilenlerden çıkar' : 'Kaydet'}
+              className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+                savedId ? 'text-weather-good' : favorite === 'error' ? 'text-error' : 'text-ink hover:text-primary'
+              }`}
+            >
+              <Icon name="star" fill={!!savedId} className="text-[20px]" />
+            </button>
+          </div>
         </div>
+        {favorite === 'error' && (
+          <p className="font-body-sm text-body-sm text-error -mt-1 mb-space-xs">Kaydedilemedi, tekrar dene.</p>
+        )}
         <h2 className="font-headline-lg-mobile text-headline-lg-mobile text-ink mb-space-xs">{alt.title}</h2>
         <p className="font-body-md text-body-md text-text-secondary leading-relaxed">
           {alt.summary} • Kişi başı {formatCost(cost)}
@@ -137,7 +492,10 @@ export function DetailScreen({ plan, index, travelMode, userLoc, onRequestLocati
       </div>
 
       <div className="bg-surface-container rounded-xl p-space-sm shadow-sm mb-space-xl">
-        <RouteMap alternative={alt} color={s.hex} origin={origin} approach={approachRoute} />
+        {recalculating && (
+          <p className="font-body-sm text-body-sm text-text-secondary text-center pb-space-xs">Rota güncelleniyor…</p>
+        )}
+        <RouteMap alternative={alt} color={s.hex} origin={origin} approach={approachRoute} arrivedOrders={arrived} />
         {!alt.routes_available && (
           <p className="font-body-sm text-[11px] text-text-secondary text-center pt-space-xs">
             Rota çizgisi alınamadı, yalnızca duraklar gösteriliyor.
@@ -207,15 +565,66 @@ export function DetailScreen({ plan, index, travelMode, userLoc, onRequestLocati
               >
                 {stop.order}
               </div>
-              <div className="bg-surface rounded-xl p-space-md shadow-sm ml-2">
-                <div className="flex items-center gap-1.5 mb-space-xs">
-                  <span className={`font-label-md text-label-md ${s.text}`}>{stop.order}. Durak</span>
-                  <span className="text-text-secondary text-xs">•</span>
-                  <span className="font-label-sm text-label-sm text-text-secondary">
-                    {stop.arrival_time} ({stop.duration_minutes} dk)
-                  </span>
+              <div className={`bg-surface rounded-xl p-space-md shadow-sm ml-2 transition-opacity ${done ? 'opacity-50' : ''}`}>
+                <div className="flex items-center justify-between gap-1.5 mb-space-xs">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className={`font-label-md text-label-md ${s.text}`}>{stop.order}. Durak</span>
+                    <span className="text-text-secondary text-xs">•</span>
+                    <span className="font-label-sm text-label-sm text-text-secondary">
+                      {stop.arrival_time} ({stop.duration_minutes} dk)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-0.5 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => moveStop(stop.order, -1)}
+                      disabled={i === 0 || recalculating}
+                      aria-label="Yukarı taşı"
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-text-secondary hover:text-ink disabled:opacity-30"
+                    >
+                      <Icon name="arrow_upward" className="text-[16px]" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveStop(stop.order, 1)}
+                      disabled={i === stops.length - 1 || recalculating}
+                      aria-label="Aşağı taşı"
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-text-secondary hover:text-ink disabled:opacity-30"
+                    >
+                      <Icon name="arrow_downward" className="text-[16px]" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSwapFor(stop)}
+                      disabled={recalculating}
+                      aria-label="Durağı değiştir"
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-text-secondary hover:text-ink disabled:opacity-30"
+                    >
+                      <Icon name="swap_horiz" className="text-[16px]" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeStop(stop.order)}
+                      disabled={stops.length <= 1 || recalculating}
+                      aria-label="Durağı sil"
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-error disabled:opacity-30"
+                    >
+                      <Icon name="delete" className="text-[16px]" />
+                    </button>
+                  </div>
                 </div>
-                <h3 className="font-headline-md text-headline-md text-ink mb-space-xs">{stop.name ?? stop.activity}</h3>
+                <div className="flex items-center gap-1.5 mb-space-xs">
+                  <h3 className="font-headline-md text-headline-md text-ink">{stop.name ?? stop.activity}</h3>
+                  <a
+                    href={mapsUrl(stop)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Google Maps'te gör (gerçek fotoğraflar ve yorumlar)"
+                    className="text-text-secondary hover:text-primary flex-shrink-0"
+                  >
+                    <Icon name="open_in_new" className="text-[16px]" />
+                  </a>
+                </div>
                 <div className="bg-surface-container-low rounded-lg p-2.5 mt-space-xs mb-space-xs flex flex-col gap-1.5">
                   <p className="font-body-md text-body-md text-on-surface-variant">{stop.activity}</p>
                   <p className="font-body-md text-body-md text-on-surface-variant">💡 {stop.recommendation}</p>
@@ -254,6 +663,16 @@ export function DetailScreen({ plan, index, travelMode, userLoc, onRequestLocati
         })}
       </ol>
 
+      <button
+        type="button"
+        onClick={() => setAdding(true)}
+        disabled={recalculating}
+        className="mb-space-xl h-12 rounded-xl border-2 border-dashed border-outline-variant text-text-secondary hover:text-ink hover:border-ink font-label-md text-label-md flex items-center justify-center gap-1.5 disabled:opacity-40"
+      >
+        <Icon name="add" className="text-[18px]" />
+        Durak ekle
+      </button>
+
       <div className="fixed bottom-16 left-0 right-0 z-40 bg-gradient-to-t from-background via-background/95 to-transparent pt-4 pb-3 px-margin">
         <div className="max-w-md mx-auto flex gap-space-sm">
           <button
@@ -274,6 +693,25 @@ export function DetailScreen({ plan, index, travelMode, userLoc, onRequestLocati
           </button>
         </div>
       </div>
+
+      {(swapFor || adding) && (
+        <StopEditSheet
+          mode={swapFor ? 'replace' : 'add'}
+          stop={swapFor}
+          pool={plan.place_pool ?? []}
+          usedIds={new Set(plan.alternatives.flatMap((a) => a.stops.map((st) => st.place_id)))}
+          alternatives={plan.alternatives}
+          currentIndex={index}
+          canTransferOut={stops.length > 1}
+          onPickPlace={swapFor ? swapPlace : addPlace}
+          onTransferOut={transferOut}
+          onTransferIn={transferIn}
+          onClose={() => {
+            setSwapFor(null)
+            setAdding(false)
+          }}
+        />
+      )}
     </div>
   )
 }
