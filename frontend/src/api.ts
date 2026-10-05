@@ -2,18 +2,29 @@ import type { ApproachRoute, PlanRequest, PlanResponse, RouteLeg, TravelMode } f
 
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  // Backend'in sunucu tarafı misafir kotası (X-Guest-Limit-Reached header'ı) mı
+  // tetiklendi, yoksa genel bir hata/rate limit mi — App.tsx bu ikisini ayırt eder.
+  guestLimit: boolean
+  constructor(status: number, message: string, guestLimit = false) {
     super(message)
     this.status = status
+    this.guestLimit = guestLimit
   }
 }
 
-export async function createPlan(request: PlanRequest, signal?: AbortSignal): Promise<PlanResponse> {
+export async function createPlan(
+  request: PlanRequest,
+  signal?: AbortSignal,
+  accessToken?: string,
+): Promise<PlanResponse> {
   let response: Response
   try {
     response = await fetch('/api/plan', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
       body: JSON.stringify(request),
       signal,
     })
@@ -30,7 +41,7 @@ export async function createPlan(request: PlanRequest, signal?: AbortSignal): Pr
     } catch {
       /* gövde JSON değilse varsayılan mesaj */
     }
-    throw new ApiError(response.status, detail)
+    throw new ApiError(response.status, detail, response.headers.get('X-Guest-Limit-Reached') === '1')
   }
   return response.json()
 }

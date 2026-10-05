@@ -6,6 +6,11 @@ import os
 for _name in ("PLACES_API_KEY", "GEOCODING_API_KEY", "ROUTES_API_KEY", "GROQ_API_KEY"):
     os.environ.setdefault(_name, f"test-{_name.lower()}")
 
+# Testler, aynı app singleton'ını (TestClient) tekrar tekrar çağırabilir;
+# IP bazlı rate limiting testlerde kapalı olmalı, aksi halde test sayısı
+# arttıkça flaky 429'lar görülebilir (bkz. app/core/rate_limit.py).
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
 from types import SimpleNamespace  # noqa: E402
 
 import pytest  # noqa: E402

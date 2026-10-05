@@ -87,7 +87,11 @@ cp .env.example .env
 | `GROQ_MODEL` | hayır | Varsayılan: `openai/gpt-oss-120b`. Hangi modellerin erişilebilir olduğu hesap/tier'a göre değişir (bkz. `console.groq.com/docs/models`). |
 | `HTTP_TIMEOUT` | hayır | Dış servis çağrıları için saniye cinsinden zaman aşımı (varsayılan `10.0`) |
 | `APP_NAME` | hayır | Varsayılan: `Rota App` |
-| `DEBUG` | hayır | Varsayılan: `false` |
+| `DEBUG` | hayır | Varsayılan: `false`. `true` olmadıkça `/docs`, `/redoc`, `/openapi.json` kapalıdır. |
+| `RATE_LIMIT_ENABLED` | hayır | Varsayılan: `true`. IP bazlı rate limiting'i (`slowapi`) kapatmak için `false` (testlerde kapalı) |
+| `GUEST_DAILY_PLAN_LIMIT` | hayır | Varsayılan: `3`. Giriş yapmamış kullanıcıların günlük `/plan` kotası (sunucu tarafı; `frontend/src/guestLimit.ts`'teki `GUEST_PLAN_LIMIT` ile aynı tutulmalı) |
+| `SUPABASE_JWT_SECRET` | hayır | Supabase Dashboard → Project Settings → API → JWT Settings → "Legacy JWT Secret". Ayarlanmazsa her istek misafir sayılır (giriş yapmış kullanıcılar da günlük kotaya tabi olur) |
+| `CORS_ORIGINS` | hayır | Varsayılan: `http://localhost:5173`. Virgülle ayrılmış izinli origin listesi; prod'da frontend'in gerçek adresiyle değiştirilmeli |
 
 `PLACES_API_KEY`, `GEOCODING_API_KEY`, `ROUTES_API_KEY` ve `GROQ_API_KEY` olmadan uygulama açılışta hata verir (bilinçli tercih, bkz. `app/core/config.py`).
 
@@ -97,7 +101,23 @@ cp .env.example .env
 fastapi dev app/main.py
 ```
 
-API `http://127.0.0.1:8000` üzerinde ayağa kalkar, dokümantasyon `/docs`'ta.
+API `http://127.0.0.1:8000` üzerinde ayağa kalkar, dokümantasyon (`DEBUG=true` iken) `/docs`'ta.
+
+### Dağıtım (prod)
+
+`fastapi dev` geliştirme içindir, yayında kullanılmaz. Reverse proxy
+(nginx/Caddy) arkasında, HTTPS proxy'de sonlandırılmış şekilde çalıştır:
+
+```bash
+uvicorn app.main:app --proxy-headers --forwarded-allow-ips='*'
+```
+
+`--forwarded-allow-ips` IP bazlı rate limiting'in (yukarıda) gerçek istemci
+IP'sini görmesi için proxy'nin `X-Forwarded-For` header'ına güvenilmesini
+sağlar — reverse proxy'nin bunu doğru ayarladığından emin ol. Prod `.env`'de
+ayrıca `DEBUG=false` (varsayılan), `CORS_ORIGINS` (gerçek frontend adresi)
+ve giriş yapmış kullanıcıları ayırt etmek istiyorsan `SUPABASE_JWT_SECRET`
+ayarlanmalı.
 
 ## Test
 
@@ -185,17 +205,17 @@ Project Settings → API):
 | `VITE_SUPABASE_URL` | Supabase proje URL'i |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anon/public key (RLS ile korunur) |
 
-Hesap/favoriler özelliği için Supabase projende **SQL Editor**'de şu tabloları
-oluşturman gerekiyor (bir kerelik):
-
-- `profiles` (kullanıcı adı; `auth.users` insert'inde trigger otomatik satır açar)
-- `saved_plans` (kaydedilen/favorilenen rotalar, link ile paylaşım)
+Hesap/favoriler özelliği için Supabase projende **SQL Editor**'de
+[`supabase/schema.sql`](supabase/schema.sql) dosyasının tamamını çalıştır
+(bir kerelik) — `profiles` (kullanıcı adı; `auth.users` insert'inde trigger
+otomatik satır açar) ve `saved_plans` (kaydedilen/favorilenen rotalar, link
+ile paylaşım) tablolarını, RLS policy'lerini ve trigger'ı kurar.
 
 İkisi de RLS açık; `profiles` herkese okunabilir/sahibi güncelleyebilir,
 `saved_plans` herkese okunabilir (gizlilik modeli linkteki tahmin edilemeyen
-uuid) ama sadece sahibi silebilir. Tam SQL script'i proje geçmişinde
-(bu özelliği ekleyen commit) veya Supabase Dashboard'daki tablo şemalarından
-görülebilir.
+uuid) ama sadece sahibi silebilir/ekleyebilir (hiç update policy'si yok).
+RLS kurulumu 2026-10-05'te `pg_policies`/`pg_class.relrowsecurity` üzerinden
+doğrulandı (bkz. ROADMAP.md Milestone 4).
 
 Dev server'ı çalıştır:
 

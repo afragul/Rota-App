@@ -9,6 +9,8 @@ dependencies = [
     "pydantic-settings",
     "httpx",
     "groq",
+    "slowapi",
+    "pyjwt",
 ]
 
 [project.optional-dependencies]
