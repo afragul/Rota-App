@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Rota App: a FastAPI backend that builds group activity/day-trip plans. Given a
 location, duration, budget, and group type, it searches nearby places (Google
-Places API), fetches current weather (Open-Meteo), and asks Gemini to compose
+Places API), fetches current weather (Open-Meteo), and asks an LLM (Groq) to compose
 2-3 alternative themed day plans using only the fetched places.
 
 Code comments, docstrings, and log messages are written in Turkish; keep new
@@ -48,11 +48,14 @@ service tests instead of mocking at the `httpx.AsyncClient` level.
 ## Configuration
 
 Settings are a pydantic-settings `Settings` object in [app/core/config.py](app/core/config.py),
-loaded from a `.env` file and cached via `@lru_cache` (`get_settings()`). Two
-keys have no default (`places_api_key`, `gemini_api_key`) — the app fails to
-start without them, by design. Copy `.env.example` to `.env` and fill in:
+loaded from a `.env` file and cached via `@lru_cache` (`get_settings()`). The
+API keys have no default (`places_api_key`, `geocoding_api_key`,
+`routes_api_key`, `groq_api_key`) — the app fails to start without them, by
+design. Copy `.env.example` to `.env` and fill in:
 - `PLACES_API_KEY` — Google Places (New) API key
-- `GEMINI_API_KEY` — Gemini API key
+- `GEOCODING_API_KEY` — Google Geocoding API key
+- `ROUTES_API_KEY` — Google Routes API key
+- `GROQ_API_KEY` — Groq API key (`GROQ_MODEL` optionally overrides the model)
 
 ## Architecture
 
@@ -83,11 +86,15 @@ exceptions into `HTTPException`s; all real logic lives in services.
   "searchNearby" v1 API. `_FIELD_MASK` restricts the response to only the
   fields the `Place` schema needs — extend both together when adding fields.
   All HTTP/parsing failures are normalized to `PlacesServiceError`.
-- [app/services/planner.py](app/services/planner.py) calls Gemini
-  (`google-genai`) with `response_schema=DayPlan`/`_ThemeSelection` for
-  structured JSON output. After parsing, `_validate_stops` strips any stop
-  whose `place_id` isn't in the input place pool (the model is instructed
-  not to invent places, but responses are still validated defensively).
+- [app/services/planner.py](app/services/planner.py) calls Groq
+  (`groq`, `AsyncGroq`) in `json_object` mode. Groq does not enforce a schema,
+  so the Pydantic JSON schema (`DayPlan`/`_ThemeSelection`) is embedded in the
+  prompt (`_schema_instruction`, system-filled fields are stripped by
+  `_llm_schema`) and the reply is validated with Pydantic. After parsing,
+  `_validate_and_enrich_stops` strips any stop whose `place_id` isn't in the
+  input place pool (the model is instructed not to invent places, but
+  responses are still validated defensively) and fills each stop's
+  name/latitude/longitude from the pool.
   `PlannerServiceError` covers both call failures and empty/invalid results.
 - Each service module defines its own `*ServiceError` exception; routes
   catch these and convert to `502` responses. Follow this pattern for new

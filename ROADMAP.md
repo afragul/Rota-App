@@ -49,6 +49,14 @@ kullanıyor.
   `SECURITY DEFINER` trigger ile otomatik satır (signUp'ın `options.data`
   metadata'sından); sonradan Hesabım'dan değiştirilebilir. Kısıtlama yok,
   sadece emoji yasak.
+- [x] **Misafir rota limiti**: hesapsız kullanıcı 3 rota oluşturabiliyor;
+  4. denemede istek atılmadan "Ücretsiz hakkın doldu" ekranı (giriş/kayıt
+  yönlendirmesi) açılıyor (`frontend/src/guestLimit.ts`,
+  `screens/LimitScreen.tsx`, `App.tsx::submit`). Sayaç yalnızca başarıyla
+  üretilen planlarda artıyor (hata ve netleştirme sorusu sayılmıyor), giriş
+  yapmış kullanıcıya uygulanmıyor. Sayaç `localStorage`'da: tarayıcı verisi
+  silinince ya da API doğrudan çağrılınca aşılır; kayda yönlendirme amaçlı
+  yumuşak bir sınır. Gerçek zorlama için aşağıdaki JWT maddesine bak.
 - [x] **Açık/koyu tema anahtarı**: `data-theme` + `localStorage`, sistem
   ayarını ezebiliyor (`frontend/src/theme.ts`).
 - [x] **Rota kaydetme/favorileme + link ile paylaşım**: `saved_plans`
@@ -89,7 +97,65 @@ kullanıyor.
   policy'leri gerekiyor, henüz kurulmadı.
 - [ ] **Backend'in Supabase JWT doğrulaması**: şu an hiçbir endpoint
   kullanıcı kimliği istemiyor; kullanıcıya özel backend mantığı gerekirse
-  (ör. plan geçmişini backend'in de görmesi) eklenecek.
+  (ör. plan geçmişini backend'in de görmesi) eklenecek;
+  misafir rota limitini sunucuda zorlamak (IP/cihaz bazlı sayaç) da buna bağlı.
+
+## Milestone 4 — Public'e açılış hazırlığı
+
+Uygulama şu an tek kullanıcılı/demo kullanımına göre kuruldu. Herkese açık
+yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce).
+
+### Yayın öncesi zorunlu
+
+- [ ] **`/plan` ve `/route/*` için istek sınırı (rate limit)**: hiçbir endpoint
+  kimlik ya da istek sınırı istemiyor; adresi bulan biri döngüyle çağırıp
+  Groq/Google kotasını ve faturasını tüketebilir. IP bazlı limit (ör.
+  `slowapi`) ilk adım. Misafir limiti (frontend) bunu korumaz.
+- [ ] **Backend'de Supabase JWT doğrulaması**: geçerli token varsa oturumlu
+  kullanıcı, yoksa misafir. Misafir limitini sunucuda zorlamanın ön koşulu
+  (kalıcı sayaç için Supabase tablosu ya da Redis; bellekte tutulursa yeniden
+  başlayınca sıfırlanır; aşılınca `429`, frontend limit ekranına çevirir).
+- [ ] **Girdi sınırları**: `PlanRequest.free_text`, `city` ve benzeri alanlara
+  `max_length`; `duration_hours` ve mekan havuzu için üst sınır. Serbest metin
+  doğrudan LLM prompt'una giriyor, uzunluk sınırı hem maliyeti hem
+  prompt-injection yüzeyini küçültür.
+- [ ] **CORS ve yayın yapılandırması**: `app/main.py`'de CORS ayarı yok (dev'de
+  Vite proxy'si gerekeni örtüyor). Yayında frontend'in alan adına özel
+  `allow_origins`, `/docs` ve `/openapi.json`'un kapatılması/korunması.
+- [ ] **Supabase RLS denetimi**: `profiles`, `saved_plans` kuralları tek tek
+  gözden geçirilsin (sahibi dışında yazma/silme yok; `saved_plans` herkese
+  açık okunabilir, gizlilik yalnızca uuid'nin tahmin edilememesine dayanıyor;
+  hassas veri konmamalı). Anon key'in herkese açık olduğu varsayılarak test.
+- [ ] **API anahtarı kısıtları ve bütçe uyarısı**: Google anahtarları IP/API
+  bazında kısıtlansın (Places, Routes, Geocoding ayrı anahtarlar zaten), Google
+  Cloud ve Groq'ta kota + bütçe alarmı kurulsun.
+- [ ] **Sırların yönetimi**: `.env` git'te değil (`.gitignore`), ama yayın
+  ortamında ortam değişkeni/secret manager kullanılacak; sızmış olabilecek
+  anahtarlar yenilensin.
+
+### Yayın için gerekli altyapı
+
+- [ ] **Deploy**: backend için `Dockerfile` (şu an yok) ve bir barındırma
+  seçimi; frontend `vite build` çıktısının statik barındırılması; ortam
+  başına (`dev`/`prod`) ayrı Supabase projesi ve API anahtarları.
+- [ ] **CI**: GitHub Actions ile `ruff check`, `pytest`, frontend `tsc -b` ve
+  `oxlint` (şu an hiçbiri otomatik koşmuyor, `.github/` yok).
+- [ ] **Hata izleme ve log**: backend log'larının toplanması, frontend için
+  hata raporlama (ör. Sentry); LLM/Google hata oranlarının izlenmesi.
+- [ ] **`/health` kapsamı**: şu an yalnızca "ayakta" döner; yayın ortamında
+  bağımlılık durumunu (en azından anahtarların tanımlı olması) da yansıtsın.
+
+### Kullanıcıya dönük
+
+- [ ] **Gizlilik politikası ve konum izni metni**: konum yalnızca tarayıcıda
+  kullanılıp Routes API'ye gönderiliyor; ne toplandığı/saklandığı açıkça
+  yazılsın. Hesap silme (Supabase kullanıcısı ve `saved_plans` kayıtları)
+  için bir yol düşünülmeli.
+- [ ] **Frontend testleri**: giriş, misafir limiti ve plan akışının testi yok;
+  en azından `guestLimit.ts` ve `authErrorText` için birim testleri.
+- [ ] **LLM çıktı kalitesi**: planların Türkçe dönmesi prompt'ta zorlandı
+  ama rastgele kayma tamamen ölçülmedi; birkaç gerçek çıktıyla kontrol, gerekirse
+  `temperature` düşürme.
 
 ## Öncelik dışı / fikir aşamasında
 

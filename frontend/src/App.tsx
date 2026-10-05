@@ -3,11 +3,13 @@ import { ApiError, createPlan, type LatLng } from './api'
 import { useAuth } from './auth'
 import { ErrorBanner } from './components/ErrorBanner'
 import { Shell, type NavKey } from './components/Shell'
+import { guestLimitReached, recordGuestPlan } from './guestLimit'
 import { DEFAULT_PREFS, hasLocation, toRequest, type Preferences } from './prefs'
 import { AccountScreen } from './screens/AccountScreen'
 import { ClarifyScreen } from './screens/ClarifyScreen'
 import { DetailScreen, type UserLocation } from './screens/DetailScreen'
 import { NavigationScreen } from './screens/NavigationScreen'
+import { LimitScreen } from './screens/LimitScreen'
 import { LoadingScreen } from './screens/LoadingScreen'
 import { LocationScreen } from './screens/LocationScreen'
 import { PreferencesScreen } from './screens/PreferencesScreen'
@@ -21,6 +23,7 @@ type View =
   | { name: 'location' }
   | { name: 'prefs' }
   | { name: 'loading' }
+  | { name: 'limit' }
   | { name: 'clarify'; question: string }
   | { name: 'error'; error: ApiError }
   | { name: 'results' }
@@ -40,6 +43,7 @@ const TITLES: Record<View['name'], string> = {
   location: 'Rota Oluştur',
   prefs: 'Rota Oluştur',
   loading: 'Günlük Planlar',
+  limit: 'Rota Oluştur',
   clarify: 'Rota Oluştur',
   error: 'Günlük Planlar',
   results: 'Günlük Planlar',
@@ -53,6 +57,7 @@ const NAV_FOR: Record<View['name'], NavKey | null> = {
   prefs: 'preferences',
   clarify: 'preferences',
   loading: 'plans',
+  limit: 'preferences',
   error: 'plans',
   results: 'plans',
   detail: 'plans',
@@ -68,7 +73,7 @@ export default function App() {
   const [userLoc, setUserLoc] = useState<UserLocation>({ status: 'idle' })
   const abort = useRef<AbortController | null>(null)
   const [theme, toggleTheme] = useTheme()
-  const { session, recovery, clearRecovery } = useAuth()
+  const { session, loading: authLoading, recovery, clearRecovery } = useAuth()
   const [sharedId, setSharedId] = useState(() => new URLSearchParams(window.location.search).get('shared'))
   // Kaydedilenler listesinden bir rota görüntülenip (silinip) dönüldüğünde Hesabım'ı yeniden yükletir.
   const [accountKey, setAccountKey] = useState(0)
@@ -96,6 +101,8 @@ export default function App() {
     async (clarification?: { question: string; answer: string }) => {
       const base = toRequest(prefs)
       if (!base) return
+      // Misafir hakkı dolduysa istek hiç atılmaz; oturum henüz yükleniyorsa engellenmez.
+      if (!authLoading && !session && guestLimitReached()) return setView({ name: 'limit' })
       // Backend stateless: soru ve cevap istekle birlikte geri gönderilir.
       const request = clarification
         ? { ...base, previous_question: clarification.question, clarification_answer: clarification.answer }
@@ -109,6 +116,8 @@ export default function App() {
         if (isClarification(response)) {
           setView({ name: 'clarify', question: response.question })
         } else {
+          // Hak yalnızca başarıyla üretilen planlarda düşer (soru dönüşü ve hatalar sayılmaz).
+          if (!session) recordGuestPlan()
           setPlan(response)
           setView({ name: 'results' })
         }
@@ -117,7 +126,7 @@ export default function App() {
         setView({ name: 'error', error: err instanceof ApiError ? err : new ApiError(0, 'Beklenmeyen hata') })
       }
     },
-    [prefs],
+    [prefs, session, authLoading],
   )
 
   const toPrefs = () => {
@@ -192,6 +201,7 @@ export default function App() {
       )}
       {view.name === 'prefs' && <PreferencesScreen prefs={prefs} onChange={setPrefs} onSubmit={() => (hasLocation(prefs) ? submit() : setView({ name: 'location' }))} />}
       {view.name === 'loading' && <LoadingScreen prefs={prefs} onCancel={toPrefs} />}
+      {view.name === 'limit' && <LimitScreen onLogin={openAccount} onBack={toPrefs} />}
       {view.name === 'clarify' && (
         <ClarifyScreen question={view.question} onAnswer={(answer) => submit({ question: view.question, answer })} onBack={toPrefs} />
       )}

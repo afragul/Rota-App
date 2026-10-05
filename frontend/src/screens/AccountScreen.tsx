@@ -4,6 +4,20 @@ import { Icon } from '../components/Icon'
 import { deleteSavedPlan, listSavedPlans, shareUrl, type SavedPlan } from '../savedPlans'
 import { supabase } from '../supabase'
 
+// Supabase Auth hata mesajları İngilizce geliyor; bilinenleri Türkçeye çevirir.
+function authErrorText(message: string): string {
+  const m = message.toLowerCase()
+  if (m.includes('invalid login credentials')) return 'E-posta veya şifre hatalı.'
+  if (m.includes('email not confirmed')) return 'E-posta adresin henüz onaylanmamış. Gelen kutunu kontrol et.'
+  if (m.includes('user already registered')) return 'Bu e-posta ile zaten bir hesap var.'
+  if (m.includes('password should be at least')) return 'Şifre en az 6 karakter olmalı.'
+  if (m.includes('same password')) return 'Yeni şifre eskisinden farklı olmalı.'
+  if (m.includes('rate limit') || m.includes('too many')) return 'Çok fazla deneme yapıldı, biraz sonra tekrar dene.'
+  if (m.includes('invalid email') || m.includes('unable to validate email')) return 'Geçerli bir e-posta adresi gir.'
+  if (m.includes('failed to fetch') || m.includes('network')) return 'Bağlantı hatası, internetini kontrol et.'
+  return 'Bir hata oluştu, tekrar dene.'
+}
+
 interface Props {
   session: Session | null
   /** Kullanıcı şifre sıfırlama e-postasındaki linke tıklayıp geri döndüğünde true. */
@@ -37,7 +51,7 @@ function NewPasswordForm({ onDone }: { onDone: () => void }) {
     setError(null)
     const { error } = await supabase.auth.updateUser({ password })
     setSubmitting(false)
-    if (error) setError(error.message)
+    if (error) setError(authErrorText(error.message))
     else onDone()
   }
 
@@ -325,7 +339,7 @@ export function AccountScreen({ session, recovery, onRecoveryDone, onOpenSaved }
     if (mode === 'forgot') {
       const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
       setSubmitting(false)
-      if (error) setError(error.message)
+      if (error) setError(authErrorText(error.message))
       else setNotice('Şifre sıfırlama bağlantısı e-postana gönderildi.')
       return
     }
@@ -345,14 +359,14 @@ export function AccountScreen({ session, recovery, onRecoveryDone, onOpenSaved }
       }
       const { error } = await supabase.auth.signUp({ email, password, options: { data: { username: normalized } } })
       setSubmitting(false)
-      if (error) setError(error.message)
+      if (error) setError(authErrorText(error.message))
       else setNotice('Kayıt başarılı. E-postana gelen bağlantıyla hesabını onayladıktan sonra giriş yapabilirsin.')
       return
     }
 
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setSubmitting(false)
-    if (error) setError(error.message)
+    if (error) setError(authErrorText(error.message))
   }
 
   return (
