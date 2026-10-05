@@ -49,17 +49,6 @@ kullanıyor.
   `SECURITY DEFINER` trigger ile otomatik satır (signUp'ın `options.data`
   metadata'sından); sonradan Hesabım'dan değiştirilebilir. Kısıtlama yok,
   sadece emoji yasak.
-<<<<<<< Updated upstream
-=======
-- [x] **Misafir rota limiti**: hesapsız kullanıcı 3 rota oluşturabiliyor;
-  4. denemede istek atılmadan "Ücretsiz hakkın doldu" ekranı (giriş/kayıt
-  yönlendirmesi) açılıyor (`frontend/src/guestLimit.ts`,
-  `screens/LimitScreen.tsx`, `App.tsx::submit`). Sayaç yalnızca başarıyla
-  üretilen planlarda artıyor (hata ve netleştirme sorusu sayılmıyor), giriş
-  yapmış kullanıcıya uygulanmıyor. Bu sadece UX katmanı (localStorage,
-  bastırılabilir) — gerçek zorlama artık backend'de de var, bkz. Milestone 4
-  "`/plan` ve `/route/*` için istek sınırı".
->>>>>>> Stashed changes
 - [x] **Açık/koyu tema anahtarı**: `data-theme` + `localStorage`, sistem
   ayarını ezebiliyor (`frontend/src/theme.ts`).
 - [x] **Rota kaydetme/favorileme + link ile paylaşım**: `saved_plans`
@@ -98,7 +87,8 @@ kullanıyor.
   aramadan seçmesi — maliyet/karmaşıklık nedeniyle kapsam dışı tutuldu.
 - [ ] **Profil fotoğrafı**: Supabase Storage'da yeni bir bucket + RLS
   policy'leri gerekiyor, henüz kurulmadı.
-<<<<<<< Updated upstream
+
+ Updated upstream
 - [ ] **Backend'in Supabase JWT doğrulaması**: şu an hiçbir endpoint
   kullanıcı kimliği istemiyor; kullanıcıya özel backend mantığı gerekirse
   (ör. plan geçmişini backend'in de görmesi) eklenecek.
@@ -189,7 +179,7 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
 - [ ] **LLM çıktı kalitesi**: planların Türkçe dönmesi prompt'ta zorlandı
   ama rastgele kayma tamamen ölçülmedi; birkaç gerçek çıktıyla kontrol, gerekirse
   `temperature` düşürme.
->>>>>>> Stashed changes
+
 
 ## Öncelik dışı / fikir aşamasında
 
