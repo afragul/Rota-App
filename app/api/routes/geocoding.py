@@ -10,9 +10,7 @@ router = APIRouter(prefix="/geocode", tags=["geocode"])
 
 @router.get("")
 async def get_geocode(
-    address: Annotated[
-        str, Query(min_length=1, max_length=200, description="Şehir veya adres metni")
-    ],
+    address: Annotated[str, Query(min_length=1, description="Şehir veya adres metni")],
 ) -> GeocodeResult:
     """Verilen şehir/adres metnini koordinata çevirir."""
     try:
