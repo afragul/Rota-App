@@ -52,7 +52,7 @@ loaded from a `.env` file and cached via `@lru_cache` (`get_settings()`). Two
 keys have no default (`places_api_key`, `gemini_api_key`) — the app fails to
 start without them, by design. Copy `.env.example` to `.env` and fill in:
 - `PLACES_API_KEY` — Google Places (New) API key
-- `GEMINI_API_KEY` — Groq API Key
+- `GROQ_API_KEY` — Groq API Key
 
 ## Architecture
 
