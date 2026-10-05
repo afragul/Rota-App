@@ -38,6 +38,7 @@ KESİN KURALLAR:
   ve mümkün olduğunca farklı duraklar içersin. Tek alternatif döndürme.
 - Öneriler somut olsun. "Güzel vakit geçirirsiniz" gibi boş cümleler yazma.
 - Her durağın name/latitude/longitude alanlarını null bırak, bunları sen değil sistem dolduracak.
+- Tüm metin alanlarını (theme, title, summary, activity, recommendation) TÜRKÇE yaz. Mekan adları hariç İngilizce kelime kullanma.
 """
 
 AMBIGUITY_SYSTEM_INSTRUCTION = """Kullanıcının serbest metni bir gün planı kurmak için
@@ -137,6 +138,7 @@ MEKAN LİSTESİ
 {_format_places(places)}
 
 Bu mekanlardan {request.duration_hours} saatlik 3 birbirinden farklı alternatif plan kur.
+Tüm metin alanlarını (theme, title, summary, activity, recommendation) TÜRKÇE yaz. Mekan adları hariç İngilizce kelime kullanma.
 """
 
 
