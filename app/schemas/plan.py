@@ -1,8 +1,13 @@
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.core.themes import THEME_TYPES
 from app.schemas.places import Place
+
+# Herkese açık API: LLM prompt'una ve Google çağrılarına giren alanlar sınırlı tutulur
+MAX_CATEGORIES = 6
+MAX_LEG_STOPS = 25
 
 
 class BudgetLevel(StrEnum):
@@ -30,34 +35,46 @@ class PlanRequest(BaseModel):
     """Kullanıcıdan gelen istek."""
 
     # Konum: latitude+longitude İKİLİSİ VEYA city verilmeli
-    latitude: float | None = None
-    longitude: float | None = None
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
     city: str | None = Field(
         default=None,
+        max_length=200,
         description="latitude/longitude verilmezse şehir/adres metninden koordinat çözümlenir",
     )
 
-    duration_hours: int = 4
+    duration_hours: int = Field(default=4, ge=1, le=12)
     budget: BudgetLevel = BudgetLevel.MEDIUM
     group_type: GroupType = GroupType.FRIENDS
     travel_mode: TravelMode = TravelMode.WALK
 
     # Kategori seçimi VEYA serbest metin
-    categories: list[str] | None = None
-    free_text: str | None = None
+    categories: list[str] | None = Field(default=None, max_length=MAX_CATEGORIES)
+    free_text: str | None = Field(default=None, max_length=500)
 
     # Netleştirme turu: bir önceki /plan cevabı ClarificationNeeded ise, istemci
     # soruyu ve kullanıcının cevabını bu iki alanla geri gönderir. Sunucu
     # tarafında oturum/state tutulmuyor (bkz. ROADMAP.md Milestone 2).
     previous_question: str | None = Field(
         default=None,
+        max_length=300,
         description="Bir önceki /plan çağrısında dönen netleştirme sorusu (varsa)",
     )
     clarification_answer: str | None = Field(
         default=None,
+        max_length=500,
         description="Kullanıcının previous_question'a cevabı; varsa belirsizlik "
         "kontrolü atlanır, doğrudan plana geçilir",
     )
+
+    @field_validator("categories")
+    @classmethod
+    def _kategoriler_gecerli_mi(cls, value: list[str] | None) -> list[str] | None:
+        if value is not None:
+            unknown = [c for c in value if c not in THEME_TYPES]
+            if unknown:
+                raise ValueError(f"Bilinmeyen kategori: {unknown[0]}")
+        return value
 
     @model_validator(mode="after")
     def _konum_verildi_mi(self) -> "PlanRequest":
@@ -131,10 +148,10 @@ class RouteLeg(BaseModel):
 class ApproachRequest(BaseModel):
     """Kullanıcının bulunduğu yerden bir noktaya (ilk durak) rota isteği."""
 
-    origin_latitude: float
-    origin_longitude: float
-    destination_latitude: float
-    destination_longitude: float
+    origin_latitude: float = Field(ge=-90, le=90)
+    origin_longitude: float = Field(ge=-180, le=180)
+    destination_latitude: float = Field(ge=-90, le=90)
+    destination_longitude: float = Field(ge=-180, le=180)
     travel_mode: TravelMode = TravelMode.WALK
 
 
@@ -154,14 +171,14 @@ class LegStop(BaseModel):
     """Ayakları yeniden hesaplamak için gereken minimum durak bilgisi."""
 
     order: int
-    latitude: float
-    longitude: float
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
 
 
 class LegsRequest(BaseModel):
     """Kullanıcı bir durağı silip/sırasını değiştirip ayakları yeniden istediğinde."""
 
-    stops: list[LegStop]
+    stops: list[LegStop] = Field(max_length=MAX_LEG_STOPS)
     travel_mode: TravelMode = TravelMode.WALK
 
 
