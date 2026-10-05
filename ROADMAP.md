@@ -49,6 +49,14 @@ kullanıyor.
   `SECURITY DEFINER` trigger ile otomatik satır (signUp'ın `options.data`
   metadata'sından); sonradan Hesabım'dan değiştirilebilir. Kısıtlama yok,
   sadece emoji yasak.
+- [x] **Misafir rota limiti**: hesapsız kullanıcı 3 rota oluşturabiliyor;
+  4. denemede istek atılmadan "Ücretsiz hakkın doldu" ekranı (giriş/kayıt
+  yönlendirmesi) açılıyor (`frontend/src/guestLimit.ts`,
+  `screens/LimitScreen.tsx`, `App.tsx::submit`). Sayaç yalnızca başarıyla
+  üretilen planlarda artıyor (hata ve netleştirme sorusu sayılmıyor), giriş
+  yapmış kullanıcıya uygulanmıyor. Sayaç `localStorage`'da: tarayıcı verisi
+  silinince ya da API doğrudan çağrılınca aşılır; kayda yönlendirme amaçlı
+  yumuşak bir sınır. Gerçek zorlama için aşağıdaki JWT maddesine bak.
 - [x] **Açık/koyu tema anahtarı**: `data-theme` + `localStorage`, sistem
   ayarını ezebiliyor (`frontend/src/theme.ts`).
 - [x] **Rota kaydetme/favorileme + link ile paylaşım**: `saved_plans`
@@ -92,7 +100,6 @@ kullanıyor.
 - [ ] **Backend'in Supabase JWT doğrulaması**: şu an hiçbir endpoint
   kullanıcı kimliği istemiyor; kullanıcıya özel backend mantığı gerekirse
   (ör. plan geçmişini backend'in de görmesi) eklenecek.
-=======
 
 ## Milestone 4 — Public'e açılış hazırlığı
 
@@ -179,7 +186,6 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
 - [ ] **LLM çıktı kalitesi**: planların Türkçe dönmesi prompt'ta zorlandı
   ama rastgele kayma tamamen ölçülmedi; birkaç gerçek çıktıyla kontrol, gerekirse
   `temperature` düşürme.
-
 
 ## Öncelik dışı / fikir aşamasında
 

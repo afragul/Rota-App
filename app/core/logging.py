@@ -24,5 +24,11 @@ def setup_logger(level: str = "INFO") -> None:
                 "handlers": ["console"],
                 "level": level,
             },
+            # httpx INFO'da istek URL'sini loglar; Geocoding key'i query string'de gittiği
+            # için key log'a düşer. Sadece uyarı/hata seviyesi loglansın.
+            "loggers": {
+                "httpx": {"level": "WARNING"},
+                "httpcore": {"level": "WARNING"},
+            },
         }
     )
