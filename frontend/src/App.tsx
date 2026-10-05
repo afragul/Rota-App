@@ -112,7 +112,7 @@ export default function App() {
       abort.current = controller
       setView({ name: 'loading' })
       try {
-        const response = await createPlan(request, controller.signal)
+        const response = await createPlan(request, controller.signal, session?.access_token)
         if (isClarification(response)) {
           setView({ name: 'clarify', question: response.question })
         } else {
@@ -123,6 +123,9 @@ export default function App() {
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return
+        // Backend'in sunucu tarafı misafir kotası tetiklendiyse (localStorage
+        // bastırılmış/silinmiş olsa bile) aynı "limit" ekranını göster.
+        if (err instanceof ApiError && err.guestLimit) return setView({ name: 'limit' })
         setView({ name: 'error', error: err instanceof ApiError ? err : new ApiError(0, 'Beklenmeyen hata') })
       }
     },

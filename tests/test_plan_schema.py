@@ -29,3 +29,17 @@ def test_yarim_koordinat_yetersiz():
     """Sadece latitude verilip longitude eksikse ve city de yoksa hata vermeli."""
     with pytest.raises(ValidationError):
         PlanRequest(latitude=40.18)
+
+
+def test_gecersiz_girdiler_reddedilir():
+    for kwargs in (
+        {"duration_hours": 0},
+        {"duration_hours": 100},
+        {"free_text": "a" * 501},
+        {"city": "a" * 201},
+        {"categories": ["yok_boyle_tema"]},
+        {"categories": ["kafe"] * 7},
+        {"latitude": 91.0, "longitude": 0.0},
+    ):
+        with pytest.raises(ValidationError):
+            PlanRequest(**{"city": "Bursa", **kwargs})

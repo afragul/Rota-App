@@ -95,10 +95,11 @@ kullanıyor.
   aramadan seçmesi — maliyet/karmaşıklık nedeniyle kapsam dışı tutuldu.
 - [ ] **Profil fotoğrafı**: Supabase Storage'da yeni bir bucket + RLS
   policy'leri gerekiyor, henüz kurulmadı.
+
+ Updated upstream
 - [ ] **Backend'in Supabase JWT doğrulaması**: şu an hiçbir endpoint
   kullanıcı kimliği istemiyor; kullanıcıya özel backend mantığı gerekirse
-  (ör. plan geçmişini backend'in de görmesi) eklenecek;
-  misafir rota limitini sunucuda zorlamak (IP/cihaz bazlı sayaç) da buna bağlı.
+  (ör. plan geçmişini backend'in de görmesi) eklenecek.
 
 ## Milestone 4 — Public'e açılış hazırlığı
 
@@ -107,28 +108,57 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
 
 ### Yayın öncesi zorunlu
 
-- [ ] **`/plan` ve `/route/*` için istek sınırı (rate limit)**: hiçbir endpoint
-  kimlik ya da istek sınırı istemiyor; adresi bulan biri döngüyle çağırıp
-  Groq/Google kotasını ve faturasını tüketebilir. IP bazlı limit (ör.
-  `slowapi`) ilk adım. Misafir limiti (frontend) bunu korumaz.
-- [ ] **Backend'de Supabase JWT doğrulaması**: geçerli token varsa oturumlu
-  kullanıcı, yoksa misafir. Misafir limitini sunucuda zorlamanın ön koşulu
-  (kalıcı sayaç için Supabase tablosu ya da Redis; bellekte tutulursa yeniden
-  başlayınca sıfırlanır; aşılınca `429`, frontend limit ekranına çevirir).
-- [ ] **Girdi sınırları**: `PlanRequest.free_text`, `city` ve benzeri alanlara
-  `max_length`; `duration_hours` ve mekan havuzu için üst sınır. Serbest metin
-  doğrudan LLM prompt'una giriyor, uzunluk sınırı hem maliyeti hem
-  prompt-injection yüzeyini küçültür.
-- [ ] **CORS ve yayın yapılandırması**: `app/main.py`'de CORS ayarı yok (dev'de
-  Vite proxy'si gerekeni örtüyor). Yayında frontend'in alan adına özel
-  `allow_origins`, `/docs` ve `/openapi.json`'un kapatılması/korunması.
-- [ ] **Supabase RLS denetimi**: `profiles`, `saved_plans` kuralları tek tek
-  gözden geçirilsin (sahibi dışında yazma/silme yok; `saved_plans` herkese
-  açık okunabilir, gizlilik yalnızca uuid'nin tahmin edilememesine dayanıyor;
-  hassas veri konmamalı). Anon key'in herkese açık olduğu varsayılarak test.
-- [ ] **API anahtarı kısıtları ve bütçe uyarısı**: Google anahtarları IP/API
-  bazında kısıtlansın (Places, Routes, Geocoding ayrı anahtarlar zaten), Google
-  Cloud ve Groq'ta kota + bütçe alarmı kurulsun.
+- [x] **`/plan` ve `/route/*` için istek sınırı (rate limit)**: `slowapi` ile
+  IP bazlı limit — `/plan` `10/dakika`, `/route/approach` `20/dakika`,
+  `/route/legs` `30/dakika`, `/geocode`/`/places/nearby`/`/weather`
+  `20/dakika`, tanımsız her route için `60/dakika` güvenlik ağı
+  (`app/core/rate_limit.py`). `/health` muaf. Testlerde kapalı
+  (`RATE_LIMIT_ENABLED=false`, bkz. `tests/conftest.py`) — aksi halde aynı
+  `TestClient`'ı tekrar tekrar çağıran testler flaky 429 alabilirdi.
+- [x] **Backend'de Supabase JWT doğrulaması**: `app/core/auth.py::get_optional_user_id`
+  — geçerli bir Supabase JWT'si (HS256, `SUPABASE_JWT_SECRET`, `aud=authenticated`)
+  varsa kullanıcı id'si (`sub`), yoksa/geçersizse `None` (misafir). Tamamen
+  opsiyonel: secret ayarlanmazsa her istek misafir sayılır, backend'in
+  auth'tan habersiz tasarımı bozulmaz. Şu an sadece `/plan`'da, misafir
+  kotasını atlamak için kullanılıyor.
+- [x] **Misafir limitini sunucuda zorlama**: `app/core/guest_limit.py` —
+  giriş yapmamış istekler için IP+gün bazlı bellek-içi sayaç
+  (`guest_daily_plan_limit=3`, frontend'deki `GUEST_PLAN_LIMIT` ile aynı).
+  Aşılınca `429` + `X-Guest-Limit-Reached: 1` header'ı; frontend bunu
+  localStorage'dan bağımsız olarak "limit" ekranına çevirir
+  (`api.ts::ApiError.guestLimit`, `App.tsx::submit`), slowapi'nin genel
+  429'uyla karıştırmaz. Bellekte tutuluyor — process yeniden başlayınca/çoklu
+  worker'da sıfırlanır; kalıcı/paylaşımlı sayaç gerekirse Redis'e taşınabilir.
+- [x] **Girdi sınırları**: `PlanRequest` (koordinat aralıkları, `duration_hours`
+  1-12, `free_text`/`city`/`previous_question`/`clarification_answer`
+  `max_length`, `categories` en fazla 6 ve yalnızca `THEME_TYPES`
+  anahtarları), `ApproachRequest`/`LegStop` koordinat aralıkları,
+  `LegsRequest.stops` en fazla 25, `/geocode` `address` en fazla 200,
+  `/places/nearby` `types` en fazla 5 eleman + `[a-z_]+` deseni.
+- [x] **CORS ve yayın yapılandırması**: `CORSMiddleware` eklendi
+  (`Settings.cors_origins`, virgülle ayrılmış, varsayılan dev origin'i);
+  `/docs`, `/redoc`, `/openapi.json` artık `DEBUG=false` iken (yayın
+  varsayılanı) tamamen kapalı. README'de `uvicorn --proxy-headers` +
+  reverse proxy/HTTPS notu eklendi.
+- [x] **Supabase RLS denetimi**: panelden `pg_policies`/`pg_class`/`pg_proc`
+  üzerinden canlı kurulum çıkarılıp doğrulandı (2026-10-05). `profiles`:
+  select herkese açık, insert/update sahibi (`auth.uid() = id`).
+  `saved_plans`: select herkese açık (gizlilik modeli uuid'nin tahmin
+  edilememesi), insert/delete sahibi, **update policy'si yok** (frontend hiç
+  güncelleme yapmıyor). Her iki tabloda da `relrowsecurity=true` — RLS
+  gerçekten uygulanıyor (sadece tanımlı olmak yetmez, bu da kontrol edildi).
+  `handle_new_user()` trigger fonksiyonu `SECURITY DEFINER` + sabit
+  `search_path` (hijack'e karşı) ve parametrik insert (injection riski yok).
+  Tam şema artık [`supabase/schema.sql`](supabase/schema.sql)'de — panelde
+  değil, repoda. Bilinen kırılgan nokta (düzeltilmedi, bilerek not edildi):
+  `profiles.username` NOT NULL ama `handle_new_user()` onu
+  `raw_user_meta_data ->> 'username'`'den okuyor — frontend'in `signUp`
+  çağrısı metadata'da `username` göndermeyi unutursa/OAuth gibi başka bir
+  kayıt yolu eklenirse trigger NOT NULL ihlaliyle patlar ve kayıt tamamen
+  başarısız olur.
+- [x] **API anahtarı kısıtları ve bütçe uyarısı**: Google Cloud konsolunda
+  anahtar kısıtları ve Google/Groq'ta kota + bütçe alarmı kuruldu (manuel,
+  kod değişikliği değil).
 - [ ] **Sırların yönetimi**: `.env` git'te değil (`.gitignore`), ama yayın
   ortamında ortam değişkeni/secret manager kullanılacak; sızmış olabilecek
   anahtarlar yenilensin.

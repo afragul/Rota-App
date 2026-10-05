@@ -37,6 +37,24 @@ class Settings(BaseSettings):
     # Tüm dış çağrılar için ortak zaman aşımı (saniye)
     http_timeout: float = 10.0
 
+    # --- Güvenlik ---
+    # IP bazlı rate limiting (slowapi); testlerde kapatılır (bkz. conftest.py).
+    rate_limit_enabled: bool = True
+
+    # Giriş yapmamış (misafir) kullanıcıların günlük plan üretme kotası.
+    # frontend/src/guestLimit.ts::GUEST_PLAN_LIMIT ile aynı değerde tutulmalı.
+    guest_daily_plan_limit: int = 3
+
+    # Supabase JWT'sini doğrulamak için paylaşılan sır (Supabase Dashboard →
+    # Project Settings → API → JWT Settings → "Legacy JWT Secret", HS256).
+    # Ayarlanmazsa her istek misafir sayılır; backend auth'tan habersiz kalır.
+    supabase_jwt_secret: SecretStr | None = None
+
+    # Virgülle ayrılmış izinli CORS origin listesi (prod'da frontend'in
+    # gerçek adresiyle değiştirilir). Dev'de Vite proxy sunucu-sunucu
+    # çalıştığı için bu ayar devreye girmez.
+    cors_origins: str = "http://localhost:5173"
+
 
 @lru_cache
 def get_settings() -> Settings:
