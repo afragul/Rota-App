@@ -1,6 +1,8 @@
 import type { Session } from '@supabase/supabase-js'
 import { useEffect, useState } from 'react'
 import { Icon } from '../components/Icon'
+import { listFavoritePlaces, removeFavoritePlace, type FavoritePlace } from '../favoritePlaces'
+import { mapsUrl } from '../meta'
 import { deleteSavedPlan, listSavedPlans, shareUrl, type SavedPlan } from '../savedPlans'
 import { supabase } from '../supabase'
 
@@ -116,9 +118,14 @@ function LoggedInPanel({ session, onOpenSaved }: { session: Session; onOpenSaved
   const [changingPassword, setChangingPassword] = useState(false)
   const [plans, setPlans] = useState<PlanSummary[] | 'loading'>('loading')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [favoritePlaces, setFavoritePlaces] = useState<FavoritePlace[] | 'loading'>('loading')
 
   const loadPlans = () => {
     listSavedPlans(session.user.id).then(({ data }) => setPlans(data ?? []))
+  }
+
+  const loadFavoritePlaces = () => {
+    listFavoritePlaces(session.user.id).then(({ data }) => setFavoritePlaces(data ?? []))
   }
 
   useEffect(() => {
@@ -134,6 +141,7 @@ function LoggedInPanel({ session, onOpenSaved }: { session: Session; onOpenSaved
         if (current === null) setEditingUsername(true)
       })
     loadPlans()
+    loadFavoritePlaces()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.user.id])
 
@@ -168,6 +176,11 @@ function LoggedInPanel({ session, onOpenSaved }: { session: Session; onOpenSaved
   const removePlan = async (id: string) => {
     await deleteSavedPlan(id)
     loadPlans()
+  }
+
+  const removeFavoritePlaceRow = async (placeId: string) => {
+    await removeFavoritePlace(session.user.id, placeId)
+    loadFavoritePlaces()
   }
 
   return (
@@ -289,6 +302,46 @@ function LoggedInPanel({ session, onOpenSaved }: { session: Session; onOpenSaved
                   removePlan(p.id)
                 }}
                 aria-label="Sil"
+                className="w-9 h-9 rounded-full flex items-center justify-center text-error flex-shrink-0"
+              >
+                <Icon name="delete" className="text-[18px]" />
+              </button>
+            </div>
+          ))}
+      </div>
+
+      <div className="flex flex-col gap-space-sm">
+        <h3 className="font-label-lg text-label-lg text-ink font-semibold">Favori Mekanlarım</h3>
+        {favoritePlaces === 'loading' && <p className="font-body-sm text-body-sm text-text-secondary">Yükleniyor...</p>}
+        {favoritePlaces !== 'loading' && favoritePlaces.length === 0 && (
+          <p className="font-body-sm text-body-sm text-text-secondary">
+            Henüz favorilediğin bir mekan yok — bir plan detayındaki duraklarda kalp ikonuyla favorileyebilirsin.
+          </p>
+        )}
+        {favoritePlaces !== 'loading' &&
+          favoritePlaces.map((p) => (
+            <div
+              key={p.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => window.open(mapsUrl(p), '_blank', 'noopener,noreferrer')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') window.open(mapsUrl(p), '_blank', 'noopener,noreferrer')
+              }}
+              className="bg-surface rounded-xl p-space-md shadow-sm flex items-center gap-space-sm text-left hover:bg-surface-container-low transition-colors cursor-pointer"
+            >
+              <div className="flex flex-col min-w-0 flex-1">
+                <span className="font-label-md text-label-md text-ink font-semibold truncate">{p.name}</span>
+                {p.address && <span className="font-body-sm text-body-sm text-text-secondary truncate">{p.address}</span>}
+              </div>
+              <Icon name="open_in_new" className="text-text-secondary text-[18px] flex-shrink-0" />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  removeFavoritePlaceRow(p.place_id)
+                }}
+                aria-label="Favorilerden çıkar"
                 className="w-9 h-9 rounded-full flex items-center justify-center text-error flex-shrink-0"
               >
                 <Icon name="delete" className="text-[18px]" />

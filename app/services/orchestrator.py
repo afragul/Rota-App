@@ -4,7 +4,14 @@ from dataclasses import dataclass
 
 from app.core.themes import DEFAULT_THEMES, filter_for_bad_weather, types_for
 from app.schemas.places import Place
-from app.schemas.plan import ClarificationNeeded, DayPlan, PlanRequest, WeatherSummary
+from app.schemas.plan import (
+    AnchorPlace,
+    ClarificationNeeded,
+    DayPlan,
+    PlanRequest,
+    PlanStop,
+    WeatherSummary,
+)
 from app.services.geocoding import geocode_address
 from app.services.places import PlacesServiceError, search_nearby
 from app.services.planner import check_ambiguity, create_plan, resolve_themes
@@ -55,6 +62,30 @@ async def _gather_places(latitude: float, longitude: float, themes: list[str]) -
                 pool.append(place)
 
     return pool[:MAX_POOL_SIZE]
+
+
+def _ensure_anchor_stop(plan: DayPlan, anchor: AnchorPlace) -> None:
+    """LLM'in seçimine güvenmeden, anchor mekanını her alternatife durak
+    olarak garanti eder (zaten varsa dokunmaz). Ana sayfada sık gidilen bir
+    mekana basılınca kullanılır — kullanıcı "bu mekan kesin rotada olsun"
+    dediği için, LLM'in onu havuzdan seçip seçmediğine bakılmaz."""
+    for alternative in plan.alternatives:
+        if any(stop.place_id == anchor.place_id for stop in alternative.stops):
+            continue
+        alternative.stops.append(
+            PlanStop(
+                place_id=anchor.place_id,
+                order=len(alternative.stops) + 1,
+                arrival_time="-",
+                duration_minutes=60,
+                activity=f"{anchor.name} keşfi",
+                recommendation="Detaylar için Google Maps linkine bakabilirsin.",
+                estimated_cost=0,
+                name=anchor.name,
+                latitude=anchor.latitude,
+                longitude=anchor.longitude,
+            )
+        )
 
 
 @dataclass
@@ -125,6 +156,21 @@ async def build_day_plan(request: PlanRequest) -> DayPlan | ClarificationNeeded:
 
     pool = await _gather_places(latitude, longitude, themes)
 
+    # Anchor mekanı havuzda yoksa ekle (ek bir Places çağrısı değil, istemci
+    # zaten tam Place verisini gönderiyor) — LLM onu görüp seçebilsin diye.
+    if request.anchor_place and not any(p.place_id == request.anchor_place.place_id for p in pool):
+        pool.insert(
+            0,
+            Place(
+                place_id=request.anchor_place.place_id,
+                name=request.anchor_place.name,
+                address=request.anchor_place.address,
+                latitude=request.anchor_place.latitude,
+                longitude=request.anchor_place.longitude,
+                types=request.anchor_place.types,
+            ),
+        )
+
     if not pool:
         raise PlacesServiceError("Bu bölgede uygun mekan bulunamadı")
 
@@ -132,6 +178,13 @@ async def build_day_plan(request: PlanRequest) -> DayPlan | ClarificationNeeded:
 
     # 4. Planı kur
     plan = await create_plan(request, pool, weather.summary)
+
+    # LLM anchor mekanını seçmemiş olabilir; seçmediyse zorla ekle (bkz.
+    # docstring) — legs hesaplamasından (add_routes) ÖNCE, ki eklenen durağın
+    # da rota çizgisi normal akışta hesaplansın.
+    if request.anchor_place:
+        _ensure_anchor_stop(plan, request.anchor_place)
+
     # Havuzu da döndür: frontend durak değiştirirken (ücretsiz) buradan seçer.
     plan.place_pool = pool
 

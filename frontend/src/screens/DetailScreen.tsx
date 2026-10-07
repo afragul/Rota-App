@@ -3,9 +3,11 @@ import { useEffect, useState } from 'react'
 import { fetchApproach, fetchLegs, type LatLng } from '../api'
 import { Icon } from '../components/Icon'
 import { RouteMap } from '../components/RouteMap'
+import { addFavoritePlace, listFavoritePlaces, removeFavoritePlace } from '../favoritePlaces'
 import { TRAVEL_MODES, THEMES, THEME_TYPES, formatCost, formatDistance, formatHours, mapsUrl, planStyle } from '../meta'
 import { deleteSavedPlan, saveFavoritePlan } from '../savedPlans'
 import type { ApproachRoute, DayPlan, Place, PlanAlternative, PlanStop, RouteLeg, TravelMode } from '../types'
+import { recordVisit } from '../visitedPlaces'
 
 export type UserLocation =
   | { status: 'idle' | 'loading' | 'denied' }
@@ -50,6 +52,23 @@ function stopFromPlace(place: Place, order: number, base?: Pick<PlanStop, 'arriv
   }
 }
 
+// Favorileme/ziyaret kaydı için durağı Place'e çevirir — pool'da varsa tam
+// veriyi (adres, tür) kullanır, yoksa durağın kendi alanlarından sadeleşir.
+function placeFromStop(stop: PlanStop, pool: Place[]): Place {
+  const fromPool = pool.find((p) => p.place_id === stop.place_id)
+  if (fromPool) return fromPool
+  return {
+    place_id: stop.place_id,
+    name: stop.name ?? stop.activity,
+    address: null,
+    latitude: stop.latitude ?? 0,
+    longitude: stop.longitude ?? 0,
+    rating: null,
+    user_rating_count: null,
+    types: [],
+  }
+}
+
 async function legsFor(stops: PlanStop[], travelMode: TravelMode): Promise<{ legs: RouteLeg[]; ok: boolean }> {
   const withCoords = stops.filter((st) => st.latitude != null && st.longitude != null)
   if (withCoords.length < 2) return { legs: [], ok: true }
@@ -68,6 +87,7 @@ interface StopEditSheetProps {
   mode: 'replace' | 'add'
   stop: PlanStop | null // mode 'replace' iken değiştirilen durak
   pool: Place[]
+  favoritePlaces: Place[]
   usedIds: Set<string>
   alternatives: PlanAlternative[]
   currentIndex: number
@@ -85,6 +105,7 @@ function StopEditSheet({
   mode,
   stop,
   pool,
+  favoritePlaces,
   usedIds,
   alternatives,
   currentIndex,
@@ -94,8 +115,9 @@ function StopEditSheet({
   onTransferIn,
   onClose,
 }: StopEditSheetProps) {
-  const [tab, setTab] = useState<'category' | 'other'>('category')
+  const [tab, setTab] = useState<'category' | 'other' | 'favorites'>('category')
   const [category, setCategory] = useState<string | null>(null)
+  const favoriteCandidates = favoritePlaces.filter((p) => !usedIds.has(p.place_id))
 
   const candidates = pool.filter((p) => {
     if (usedIds.has(p.place_id)) return false
@@ -124,7 +146,7 @@ function StopEditSheet({
           <button
             type="button"
             onClick={() => setTab('category')}
-            className={`flex-1 h-11 rounded-xl font-label-md text-label-md ${
+            className={`flex-1 min-h-11 py-2 px-1 rounded-xl font-label-sm text-label-sm leading-tight ${
               tab === 'category' ? 'bg-plan-a text-on-primary' : 'bg-surface-container-low text-ink'
             }`}
           >
@@ -132,9 +154,18 @@ function StopEditSheet({
           </button>
           <button
             type="button"
+            onClick={() => setTab('favorites')}
+            className={`flex-1 min-h-11 py-2 px-1 rounded-xl font-label-sm text-label-sm leading-tight ${
+              tab === 'favorites' ? 'bg-plan-a text-on-primary' : 'bg-surface-container-low text-ink'
+            }`}
+          >
+            Favorilerimden ekle
+          </button>
+          <button
+            type="button"
             onClick={() => setTab('other')}
             disabled={mode === 'replace' ? !canTransferOut : otherAlternatives.length === 0}
-            className={`flex-1 h-11 rounded-xl font-label-md text-label-md disabled:opacity-40 ${
+            className={`flex-1 min-h-11 py-2 px-1 rounded-xl font-label-sm text-label-sm leading-tight disabled:opacity-40 ${
               tab === 'other' ? 'bg-plan-a text-on-primary' : 'bg-surface-container-low text-ink'
             }`}
           >
@@ -188,6 +219,26 @@ function StopEditSheet({
                   </button>
                 ))}
               </div>
+            )}
+          </div>
+        ) : tab === 'favorites' ? (
+          <div className="flex flex-col gap-space-xs">
+            {favoriteCandidates.length === 0 ? (
+              <p className="font-body-sm text-body-sm text-text-secondary py-space-md text-center">
+                {favoritePlaces.length === 0 ? 'Henüz favorilediğin bir mekan yok.' : 'Favorilediğin mekanlar zaten rotada.'}
+              </p>
+            ) : (
+              favoriteCandidates.map((p) => (
+                <button
+                  key={p.place_id}
+                  type="button"
+                  onClick={() => onPickPlace(p)}
+                  className="text-left p-space-sm rounded-xl bg-surface-container-low hover:bg-surface-container flex flex-col"
+                >
+                  <span className="font-label-md text-label-md text-ink">{p.name}</span>
+                  {p.address && <span className="font-body-sm text-body-sm text-text-secondary">{p.address}</span>}
+                </button>
+              ))
             )}
           </div>
         ) : mode === 'replace' ? (
@@ -269,6 +320,7 @@ export function DetailScreen({
   const [recalculating, setRecalculating] = useState(false)
   const [swapFor, setSwapFor] = useState<PlanStop | null>(null)
   const [adding, setAdding] = useState(false)
+  const [favoritePlaces, setFavoritePlaces] = useState<Place[]>([])
   const w = plan.weather
 
   // Sekme değişince (başka bir alternatife geçilince) önceki plana ait
@@ -277,6 +329,29 @@ export function DetailScreen({
     setSavedId(null)
     setFavorite('idle')
   }, [index])
+
+  // Mekan bazlı favoriler (rota değil) — oturum değişince yeniden yüklenir.
+  useEffect(() => {
+    if (!session) return setFavoritePlaces([])
+    listFavoritePlaces(session.user.id).then(({ data }) => setFavoritePlaces(data ?? []))
+  }, [session])
+
+  const isFavoritePlace = (placeId: string) => favoritePlaces.some((p) => p.place_id === placeId)
+
+  // Tekil bir mekanı favoriler/favorilerden çıkarır — rota favorilemeden
+  // (toggleFavorite) ayrı bir kavram, StopEditSheet'in "Favorilerimden ekle"
+  // sekmesini de besler.
+  const toggleFavoritePlace = async (stop: PlanStop) => {
+    if (!session) return onRequireAccount()
+    if (isFavoritePlace(stop.place_id)) {
+      setFavoritePlaces((prev) => prev.filter((p) => p.place_id !== stop.place_id))
+      await removeFavoritePlace(session.user.id, stop.place_id)
+    } else {
+      const place = placeFromStop(stop, plan.place_pool ?? [])
+      setFavoritePlaces((prev) => [...prev, place])
+      await addFavoritePlace(place, session.user.id)
+    }
+  }
 
   // Durak silindiğinde/sırası/mekanı değiştiğinde ayakları yeniden hesaplatır;
   // sonucu App.tsx'teki plan'a geri bildirir (tek doğruluk kaynağı orada kalır,
@@ -398,10 +473,15 @@ export function DetailScreen({
 
   const approachRoute = approach.state === 'ready' ? approach.route : null
 
-  const toggleArrived = (order: number) =>
+  // "Ulaşıldı" işaretlenince (sadece false->true geçişinde, geri alırken
+  // değil) ve oturum varsa sunucuya ziyaret kaydı düşer — "sık gidilen
+  // yerler" (ana sayfa) buradan besleniyor. Kritik değil, await'siz.
+  const toggleArrived = (stop: PlanStop) =>
     setArrived((prev) => {
       const next = new Set(prev)
-      if (!next.delete(order)) next.add(order)
+      if (next.delete(stop.order)) return next
+      next.add(stop.order)
+      if (session) void recordVisit(placeFromStop(stop, plan.place_pool ?? []), session.user.id)
       return next
     })
 
@@ -604,6 +684,17 @@ export function DetailScreen({
                     </button>
                     <button
                       type="button"
+                      onClick={() => void toggleFavoritePlace(stop)}
+                      disabled={recalculating}
+                      aria-label={isFavoritePlace(stop.place_id) ? 'Mekanı favorilerden çıkar' : 'Mekanı favorile'}
+                      className={`w-7 h-7 rounded-full flex items-center justify-center disabled:opacity-30 ${
+                        isFavoritePlace(stop.place_id) ? 'text-plan-a' : 'text-text-secondary hover:text-ink'
+                      }`}
+                    >
+                      <Icon name="favorite" fill={isFavoritePlace(stop.place_id)} className="text-[16px]" />
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => removeStop(stop.order)}
                       disabled={stops.length <= 1 || recalculating}
                       aria-label="Durağı sil"
@@ -636,7 +727,7 @@ export function DetailScreen({
                   <button
                     type="button"
                     aria-pressed={done}
-                    onClick={() => toggleArrived(stop.order)}
+                    onClick={() => toggleArrived(stop)}
                     className={`flex items-center gap-1 text-xs font-label-sm transition-colors ${
                       done ? 'text-success' : 'text-text-secondary hover:text-ink'
                     }`}
@@ -699,6 +790,7 @@ export function DetailScreen({
           mode={swapFor ? 'replace' : 'add'}
           stop={swapFor}
           pool={plan.place_pool ?? []}
+          favoritePlaces={favoritePlaces}
           usedIds={new Set(plan.alternatives.flatMap((a) => a.stops.map((st) => st.place_id)))}
           alternatives={plan.alternatives}
           currentIndex={index}

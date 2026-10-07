@@ -78,17 +78,50 @@ kullanıyor.
 - [x] **"Ulaşıldı" işaretleme**: kart ve haritadaki pin soluklaşır, durak
   silinmez.
 
-### Sırada / fikir aşamasında
-
+- [x] **Mekan bazlı favorileme**: rota değil, tekil bir mekanı favorileme
+  (`favorite_places` tablosu, RLS tamamen özel — `saved_plans`'ın aksine
+  select bile herkese açık değil). Plan detayındaki her durakta kalp ikonu
+  (`DetailScreen.tsx`), Hesabım'da "Favori Mekanlarım" listesi
+  (`AccountScreen.tsx`). Favorilenen bir mekan, "+ Durak ekle" sayfasının
+  yeni "Favorilerimden ekle" sekmesinden (`StopEditSheet`) herhangi bir
+  rotaya eklenebiliyor — zaten var olan `onPickPlace`/`stopFromPlace`
+  akışını aynen kullanıyor, yeni kablolama gerekmedi.
+- [x] **Sık gidilen yerler**: "Ulaşıldı" işaretlemesi artık kalıcı — önceden
+  tamamen client-side, sekme değişince/durak düzenlenince sıfırlanan geçici
+  bir state'ti (`arrived`), şimdi (oturum açıkken) her "Ulaşıldı"ya
+  basışta `visited_places` tablosuna ziyaret sayacı işliyor
+  (`visitedPlaces.ts::recordVisit`, await'siz/kritik değil). Ana sayfada
+  (`LocationScreen.tsx`) en sık gidilen 5 mekan tıklanabilir kartlar olarak
+  çıkıyor. Tıklanınca o mekan **garanti** rotada oluyor ama süre/bütçe/grup
+  gibi tercihler yine normal akıştan (`PreferencesScreen`) soruluyor —
+  kullanıcı "anında 1 duraklı rota" değil, "bu mekanı çapa alan ama
+  tercihleri yine soran" bir akış istedi. Garanti backend'de:
+  `PlanRequest.anchor_place` verilirse `orchestrator.py::_ensure_anchor_stop`
+  LLM'in seçimine güvenmeden mekanı her alternatife durak olarak ekliyor
+  (LLM zaten seçtiyse dokunmuyor). Anchor'ın koordinatları zaten bilindiği
+  için `city`/geocoding hiç kullanılmıyor — hem ücretsiz hem mekan havuzu
+  anchor'ın etrafında aranıyor (daha isabetli).
+- [x] **Başlangıç saati seçimi**: Tercihler ekranındaki "13:00 - 16:00" ipucu
+  aslında tamamen kozmetikti — tarayıcı saatinden hesaplanıp gösteriliyordu
+  ama backend'e hiç gönderilmiyordu, LLM'in "şu an saat kaç" bilgisi yoktu.
+  Artık gerçek bir `<input type="time">` ile değiştirilebiliyor
+  (`PreferencesScreen.tsx`), `PlanRequest.start_time` ("HH:MM") olarak
+  gönderiliyor ve `planner.py::_build_prompt`'a "ilk durak bu saatte ya da
+  hemen sonrasında başlasın" talimatıyla ekleniyor. Tamamen ücretsiz (yeni
+  API çağrısı yok, sadece prompt'a bir satır).
+- [x] **"Kendi rotanı oluştur" linki düzeltildi**: `SharedPlanScreen.tsx`'teki
+  bu buton `onClose`'u çağırıyordu, yani App.tsx'in altındaki mevcut view'a
+  dönüyordu (çoğu zaman görünürde hiçbir şey değişmiyordu). Artık ayrı bir
+  `onCreateOwn` prop'u var, `App.tsx` bunu açıkça `location` view'ına
+  yönlendiriyor.
+- [ ] **Mekan arama (serbest metinle herhangi bir yeri aratıp rotaya ekleme)**:
+  değerlendirildi, kullanıcı şimdilik istemedi — Google Places Text
+  Search/Autocomplete gerektirir, favoriler/havuzdan ekle/sık gidilenlerin
+  aksine her kullanımda gerçek bir API maliyeti olur.
 - [ ] **Mekan fotoğrafı/yorumları**: Google Places'te ek maliyetli
   (fotoğraf: mekan+fotoğraf başına ayrı çağrı; yorumlar: daha pahalı bir
   fiyat katmanı + ayrı Place Details çağrısı gerektiriyor). Ücretsiz bir
   yol bulunursa değerlendirilecek, şu an öncelik değil.
-- [ ] **Mekan bazlı favorileme**: rota değil, tekil bir mekanı favorileme
-  (basit `user_id` + `place_id` tablosu — rota favorilemeden daha küçük bir
-  iş, bilinçli olarak sonraya bırakıldı).
-- [ ] **Sık gidilen yerler / rutin önerisi**: zamanla kullanıcının
-  ziyaret ettiği yerlerden bir "sık gidilenler" listesi çıkarma.
 - [ ] **Mekan değiştirirken AI'ya sorma**: şu an sadece kategori chip
   filtresi var (ücretsiz); kullanıcının serbest metinle ("bunu beğenmedim,
   daha sakin bir yer olsun" gibi) tarif etmesi ve LLM'in havuzdan/yeni
@@ -96,11 +129,14 @@ kullanıyor.
 - [ ] **Profil fotoğrafı**: Supabase Storage'da yeni bir bucket + RLS
   policy'leri gerekiyor, henüz kurulmadı.
 
+<<<<<<< feat/toggle_db
  Updated upstream
 - [ ] **Backend'in Supabase JWT doğrulaması**: şu an hiçbir endpoint
   kullanıcı kimliği istemiyor; kullanıcıya özel backend mantığı gerekirse
   (ör. plan geçmişini backend'in de görmesi) eklenecek.
 
+=======
+>>>>>>> local
 ## Milestone 4 — Public'e açılış hazırlığı
 
 Uygulama şu an tek kullanıcılı/demo kullanımına göre kuruldu. Herkese açık

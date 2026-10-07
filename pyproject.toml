@@ -10,7 +10,7 @@ dependencies = [
     "httpx",
     "groq",
     "slowapi",
-    "pyjwt",
+    "pyjwt[crypto]",
 ]
 
 [project.optional-dependencies]

@@ -160,6 +160,11 @@ export default function App() {
           setSharedId(null)
           setAccountKey((k) => k + 1)
         }}
+        onCreateOwn={() => {
+          window.history.replaceState(null, '', window.location.pathname)
+          setSharedId(null)
+          setView({ name: 'location' })
+        }}
       />
     )
   }
@@ -200,6 +205,11 @@ export default function App() {
           prefs={prefs}
           onChange={setPrefs}
           onContinue={() => hasLocation(prefs) && setView({ name: 'prefs' })}
+          onPickFrequent={(place) => {
+            setPrefs((p) => ({ ...p, anchorPlace: place, cityInput: place.name }))
+            setView({ name: 'prefs' })
+          }}
+          session={session}
         />
       )}
       {view.name === 'prefs' && <PreferencesScreen prefs={prefs} onChange={setPrefs} onSubmit={() => (hasLocation(prefs) ? submit() : setView({ name: 'location' }))} />}

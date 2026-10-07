@@ -2,6 +2,8 @@ from types import SimpleNamespace
 
 import jwt
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 from pydantic import SecretStr
 
 from app.core import auth
@@ -51,3 +53,38 @@ async def test_yanlis_audience_reddedilir(secret_ayarli):
 
 async def test_bozuk_token_reddedilir(secret_ayarli):
     assert await auth.get_optional_user_id(authorization="Bearer not-a-jwt") is None
+
+
+# --- Supabase "Signing Keys" (ES256, asimetrik genel anahtar) desteği ---
+# Yeni Supabase projelerinde legacy HS256 secret yerine/yanında bu kullanılıyor;
+# SUPABASE_JWT_SECRET'teki değer "-----BEGIN" ile başlıyorsa ES256/RS256 denenir.
+
+_EC_PRIVATE_KEY = ec.generate_private_key(ec.SECP256R1())
+_EC_PUBLIC_PEM = _EC_PRIVATE_KEY.public_key().public_bytes(
+    encoding=serialization.Encoding.PEM,
+    format=serialization.PublicFormat.SubjectPublicKeyInfo,
+).decode()
+
+
+def _es256_token(sub: str = "user-1", aud: str = "authenticated") -> str:
+    claims = {"sub": sub, "aud": aud, "role": "authenticated"}
+    return jwt.encode(claims, _EC_PRIVATE_KEY, algorithm="ES256")
+
+
+@pytest.fixture
+def ec_public_key_ayarli(monkeypatch):
+    """supabase_jwt_secret, PEM formatlı bir ES256 genel anahtarıymış gibi davran."""
+    monkeypatch.setattr(
+        auth, "get_settings", lambda: SimpleNamespace(supabase_jwt_secret=SecretStr(_EC_PUBLIC_PEM))
+    )
+
+
+async def test_es256_gecerli_token_kullanici_id_doner(ec_public_key_ayarli):
+    user_id = await auth.get_optional_user_id(authorization=f"Bearer {_es256_token(sub='user-99')}")
+    assert user_id == "user-99"
+
+
+async def test_es256_yanlis_anahtarla_imzali_token_reddedilir(ec_public_key_ayarli):
+    other_key = ec.generate_private_key(ec.SECP256R1())
+    bad = jwt.encode({"sub": "user-1", "aud": "authenticated"}, other_key, algorithm="ES256")
+    assert await auth.get_optional_user_id(authorization=f"Bearer {bad}") is None

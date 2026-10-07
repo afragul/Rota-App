@@ -4,6 +4,15 @@ export type Budget = 'low' | 'medium' | 'high'
 export type GroupType = 'solo' | 'couple' | 'friends' | 'family'
 export type TravelMode = 'WALK' | 'TRANSIT' | 'DRIVE'
 
+export interface AnchorPlace {
+  place_id: string
+  name: string
+  address?: string | null
+  latitude: number
+  longitude: number
+  types?: string[]
+}
+
 export interface PlanRequest {
   latitude?: number
   longitude?: number
@@ -16,6 +25,11 @@ export interface PlanRequest {
   free_text?: string
   previous_question?: string
   clarification_answer?: string
+  // "HH:MM" (24 saat) — verilirse LLM ilk durağı bu saatten başlatır.
+  start_time?: string
+  // Verilirse backend her alternatife bu mekanı durak olarak garanti eder
+  // (ana sayfada "sık gidilen yer" tıklamasından gelir, bkz. prefs.ts).
+  anchor_place?: AnchorPlace
 }
 
 export interface PlanStop {

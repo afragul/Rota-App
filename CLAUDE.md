@@ -13,9 +13,11 @@ Code comments, docstrings, and log messages are written in Turkish; keep new
 ones consistent with that convention unless told otherwise.
 
 The repo also has a `frontend/` app (Vite + React + TypeScript + Tailwind +
-Leaflet) that consumes this API — see "Frontend" below. The backend has no
-knowledge of the frontend's auth (Supabase): no endpoint verifies a user
-identity today.
+Leaflet) that consumes this API — see "Frontend" below. Auth is Supabase,
+and the backend only optionally knows about it: no endpoint *requires* a
+user identity, but `/plan` will verify a Supabase JWT if one is sent, purely
+to tell a logged-in user apart from a guest for rate-limiting purposes (see
+"Security" below).
 
 ## Commands
 
@@ -80,6 +82,12 @@ design. Copy `.env.example` to `.env` and fill in:
 - `ROUTES_API_KEY` — Google Routes API key
 - `GROQ_API_KEY` — Groq API key (`GROQ_MODEL` optionally overrides the model)
 
+Security-related settings are all optional with safe defaults (see
+"Security" below): `rate_limit_enabled` (default `true`, forced `false` in
+tests), `guest_daily_plan_limit` (default `3`), `supabase_jwt_secret`
+(default `None` — JWT verification is skipped entirely until set),
+`cors_origins` (default `http://localhost:5173`).
+
 ## Architecture
 
 Layering: `api/routes` → `services` → external APIs, with `schemas` (Pydantic
@@ -132,9 +140,59 @@ exceptions into `HTTPException`s; all real logic lives in services.
   the *entire* fetched place pool, not just the places the LLM used. This
   is intentional: it lets the frontend offer stop-swap/add features by
   reusing already-paid-for data, with no new Places or Groq call.
+- `PlanRequest.anchor_place` (set when the frontend's "frequent places"
+  home-screen tap seeds a plan around one specific place) is *not* trusted
+  to the LLM alone: `orchestrator.py::_ensure_anchor_stop` runs right after
+  `create_plan` and appends the anchor as a stop to every alternative that
+  doesn't already contain it. The anchor's own coordinates are used as the
+  plan's `latitude`/`longitude` client-side (see `prefs.ts::toRequest`), so
+  geocoding is skipped entirely when an anchor is set.
 - Each service module defines its own `*ServiceError` exception; routes
   catch these and convert to `502` responses. Follow this pattern for new
   external integrations.
+
+## Security
+
+Every public-facing route is rate-limited and input-bounded, since `/plan`
+fans out to several paid Google calls plus a Groq call per request:
+
+- [app/core/rate_limit.py](app/core/rate_limit.py) exports a single shared
+  `slowapi` `Limiter` (IP-keyed, `60/minute` default). Each route adds its
+  own `@limiter.limit(...)` decorator on top of that default — see
+  [app/api/routes/plan.py](app/api/routes/plan.py) (`10/minute`, the
+  priciest route) for the pattern. A route decorated this way needs a
+  `request: Request` parameter; `/health` is `@limiter.exempt`. Tests set
+  `RATE_LIMIT_ENABLED=false` (`tests/conftest.py`) so the shared `Limiter`
+  (constructed once at import time) doesn't accumulate a rate-limit count
+  across the whole test run and start rejecting later tests.
+- [app/core/auth.py](app/core/auth.py)'s `get_optional_user_id` is a
+  FastAPI dependency that verifies a Supabase JWT (`aud=authenticated`) from
+  the `Authorization: Bearer` header if `supabase_jwt_secret` is configured,
+  returning the user id or `None`. Supabase projects expose either a legacy
+  shared secret (HS256) or, newer ones, an asymmetric "Signing Keys" public
+  key (ES256/RS256, PEM-formatted) — the code picks the algorithm by
+  sniffing whether the configured value starts with `-----BEGIN`, so either
+  one can be dropped into the same setting. It never raises — a missing or
+  invalid token just means "treat as guest," consistent with login being
+  optional everywhere else. This needs the `cryptography` package (pulled
+  in via `pyjwt[crypto]`) for the ES256/RS256 path.
+- [app/core/guest_limit.py](app/core/guest_limit.py)'s
+  `enforce_guest_plan_limit` is the server-side backstop for `/plan`'s free
+  usage cap (the frontend's `guestLimit.ts` localStorage counter is
+  client-side only and trivially bypassed). It's an in-memory per-IP daily
+  counter, skipped entirely when `get_optional_user_id` returns a user id.
+  On rejection it raises `429` with an `X-Guest-Limit-Reached` header so the
+  frontend (`api.ts`'s `ApiError.guestLimit`) can tell this apart from a
+  generic `slowapi` rate-limit `429` and route the user to the right screen
+  instead of a generic error.
+- [app/main.py](app/main.py)'s `create_app()` adds `CORSMiddleware`
+  (origins from `cors_origins`) and only enables `/docs`, `/redoc`,
+  `/openapi.json` when `settings.debug` is true — they're closed by default.
+- [supabase/schema.sql](supabase/schema.sql) is the source of truth for the
+  `profiles`/`saved_plans` tables, their RLS policies, and the
+  `handle_new_user` trigger — apply it in the Supabase SQL Editor rather
+  than clicking it together in the dashboard, and keep it in sync with
+  whatever the dashboard ends up with.
 
 ## Adding a new endpoint/service
 
@@ -158,12 +216,14 @@ current plan and is lifted to `App.tsx`; screens receive it and report
 changes back up via callbacks (e.g. `DetailScreen`'s
 `onAlternativesChange`) rather than owning their own copy.
 
-- **Auth is Supabase-only and frontend-only** (`supabase.ts`, `auth.ts`).
-  The backend never sees a user identity — no endpoint checks a JWT. Login
-  is optional; a guest can use the app without an account, soft-limited by
-  `guestLimit.ts` (a `localStorage` counter, not a real quota — the comment
-  in that file is explicit that real enforcement would need backend JWT
-  checks, which don't exist yet).
+- **Auth is Supabase** (`supabase.ts`, `auth.ts`), and login is optional —
+  a guest can use the app without an account. The frontend's own
+  `guestLimit.ts` (a `localStorage` counter) is just UX: it shows the
+  "limit reached" screen before even making a request. The backend enforces
+  the real cap server-side (see "Security" in the Architecture section
+  above) and only ever learns the user's identity when `App.tsx` passes
+  `session.access_token` into `createPlan()`, which attaches it as a
+  Bearer token — this happens for `/plan` only, not for every request.
 - `savedPlans.ts` wraps `supabase.from('saved_plans')` for the
   save/favorite/share-by-link feature. The privacy model is a hard-to-guess
   UUID as the row id, not an ACL — the table is readable by anyone with the

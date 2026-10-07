@@ -122,6 +122,23 @@ async def test_create_plan_istek_dogru_kuruluyor(fake_groq):
     assert "sakin bir gün" in user["content"]
 
 
+async def test_create_plan_start_time_verilmezse_prompta_girmez(fake_groq):
+    fake = fake_groq(_plan_json(_stop("p1", 1)))
+
+    await create_plan(REQUEST, PLACES, "20°C, açık")
+
+    assert "Başlangıç saati" not in fake.calls[0]["messages"][1]["content"]
+
+
+async def test_create_plan_start_time_verilirse_prompta_girer(fake_groq):
+    fake = fake_groq(_plan_json(_stop("p1", 1)))
+    request = REQUEST.model_copy(update={"start_time": "14:30"})
+
+    await create_plan(request, PLACES, "20°C, açık")
+
+    assert "Başlangıç saati: 14:30" in fake.calls[0]["messages"][1]["content"]
+
+
 async def test_create_plan_uydurma_place_id_elenir(fake_groq):
     """Havuzda olmayan place_id'li durak atılmalı, geçerli olan kalmalı."""
     fake_groq(_plan_json(_stop("p1", 1), _stop("uydurma", 2)))
