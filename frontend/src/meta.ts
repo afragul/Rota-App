@@ -64,7 +64,7 @@ export function formatHours(minutes: number): string {
 
 // Mekanın Google Maps sayfasına link (gerçek görseller/yorumlar için) — ekstra
 // API çağrısı gerektirmez, zaten elimizdeki place_id ile kurulur.
-export function mapsUrl(stop: { place_id: string; name: string | null; activity: string }): string {
-  const query = encodeURIComponent(stop.name ?? stop.activity)
-  return `https://www.google.com/maps/search/?api=1&query=${query}&query_place_id=${stop.place_id}`
+export function mapsUrl(place: { place_id: string; name: string | null; activity?: string }): string {
+  const query = encodeURIComponent(place.name ?? place.activity ?? '')
+  return `https://www.google.com/maps/search/?api=1&query=${query}&query_place_id=${place.place_id}`
 }

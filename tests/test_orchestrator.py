@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from app.core.config import get_settings
-from app.schemas.plan import ClarificationNeeded, PlanRequest
+from app.schemas.plan import AnchorPlace, ClarificationNeeded, PlanRequest
 from app.services.geocoding import GeocodingServiceError
 from app.services.orchestrator import build_day_plan
 from app.services.places import PlacesServiceError
@@ -354,6 +354,41 @@ async def test_clarification_cevabi_verilince_kontrol_atlanir_plan_kurulur(fake_
     assert len(fake.calls) == 2  # belirsizlik kontrolü atlandı: resolve_themes + create_plan
     user_prompt = fake.calls[1]["messages"][1]["content"]
     assert "4 kişiyiz" in user_prompt
+
+
+@respx.mock
+async def test_anchor_place_llm_secmese_de_her_alternatife_eklenir(fake_groq):
+    """LLM'in sahte yanıtı (PLAN_JSON) anchor place_id'yi hiç içermiyor; yine de
+    orchestrator her alternatife garanti etmeli (kullanıcı "bu mekan kesin
+    rotada olsun" diyor, LLM'in seçimine güvenilmiyor)."""
+    fake_groq(PLAN_JSON)
+    _mock_all()
+
+    anchor = AnchorPlace(place_id="anchor1", name="Favori Kafe", latitude=40.19, longitude=29.07)
+    plan = await build_day_plan(
+        PlanRequest(city="Bursa", categories=["kafe"], anchor_place=anchor)
+    )
+
+    for alt in plan.alternatives:
+        anchor_stops = [s for s in alt.stops if s.place_id == "anchor1"]
+        assert len(anchor_stops) == 1
+        assert anchor_stops[0].name == "Favori Kafe"
+        assert anchor_stops[0].order == len(alt.stops)  # sona eklendi
+
+
+@respx.mock
+async def test_anchor_place_llm_zaten_secmisse_tekrar_eklenmez(fake_groq):
+    """LLM'in yanıtı anchor place_id'yi zaten içeriyorsa ikinci bir kopya eklenmemeli."""
+    fake_groq(PLAN_JSON)  # "p1"/"p2" zaten PLACES_OK havuzunda
+    _mock_all()
+
+    anchor = AnchorPlace(place_id="p1", name="Kitap Kahve", latitude=40.1885, longitude=29.0610)
+    plan = await build_day_plan(
+        PlanRequest(city="Bursa", categories=["kafe"], anchor_place=anchor)
+    )
+
+    for alt in plan.alternatives:
+        assert sum(1 for s in alt.stops if s.place_id == "p1") == 1
 
 
 @respx.mock

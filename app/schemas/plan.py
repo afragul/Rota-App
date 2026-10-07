@@ -31,6 +31,19 @@ class TravelMode(StrEnum):
     DRIVE = "DRIVE"
 
 
+class AnchorPlace(BaseModel):
+    """Ana sayfada seçilen sık gidilen bir mekan; verilirse orchestrator
+    LLM'in seçimine güvenmeden bu mekanı her alternatife durak olarak ekler
+    (bkz. app/services/orchestrator.py::_ensure_anchor_stop)."""
+
+    place_id: str = Field(max_length=300)
+    name: str = Field(max_length=200)
+    address: str | None = Field(default=None, max_length=300)
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    types: list[str] = Field(default_factory=list, max_length=10)
+
+
 class PlanRequest(BaseModel):
     """Kullanıcıdan gelen istek."""
 
@@ -47,6 +60,10 @@ class PlanRequest(BaseModel):
     budget: BudgetLevel = BudgetLevel.MEDIUM
     group_type: GroupType = GroupType.FRIENDS
     travel_mode: TravelMode = TravelMode.WALK
+
+    # Kullanıcının seçtiği başlangıç saati, "HH:MM" (24 saat). Verilmezse LLM
+    # kendi uygun gördüğü saatten başlatır (eski davranış).
+    start_time: str | None = Field(default=None, pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
 
     # Kategori seçimi VEYA serbest metin
     categories: list[str] | None = Field(default=None, max_length=MAX_CATEGORIES)
@@ -75,6 +92,11 @@ class PlanRequest(BaseModel):
             if unknown:
                 raise ValueError(f"Bilinmeyen kategori: {unknown[0]}")
         return value
+
+    anchor_place: AnchorPlace | None = Field(
+        default=None,
+        description="Verilirse her alternatifte durak olarak garanti edilir",
+    )
 
     @model_validator(mode="after")
     def _konum_verildi_mi(self) -> "PlanRequest":

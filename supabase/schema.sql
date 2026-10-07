@@ -94,3 +94,84 @@ drop policy if exists saved_plans_delete_own on public.saved_plans;
 create policy saved_plans_delete_own
   on public.saved_plans for delete
   using (auth.uid() = user_id);
+
+-- ============================================================
+-- favorite_places: mekan bazlı favorileme (rota değil, tekil mekan).
+-- saved_plans'tan farklı: paylaşım/link kavramı yok, tamamen özel —
+-- select herkese açık DEĞİL, sadece sahibi görebilir.
+-- ============================================================
+
+create table if not exists public.favorite_places (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  place_id text not null,
+  name text not null,
+  address text,
+  latitude double precision not null,
+  longitude double precision not null,
+  rating double precision,
+  user_rating_count integer,
+  types jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (user_id, place_id)
+);
+
+alter table public.favorite_places enable row level security;
+
+drop policy if exists favorite_places_select_own on public.favorite_places;
+create policy favorite_places_select_own
+  on public.favorite_places for select
+  using (auth.uid() = user_id);
+
+drop policy if exists favorite_places_insert_own on public.favorite_places;
+create policy favorite_places_insert_own
+  on public.favorite_places for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists favorite_places_delete_own on public.favorite_places;
+create policy favorite_places_delete_own
+  on public.favorite_places for delete
+  using (auth.uid() = user_id);
+
+-- ============================================================
+-- visited_places: "Ulaşıldı" işaretlemelerinden türeyen ziyaret sayacı.
+-- "Sık gidilen yerler" (ana sayfa) bu tablodan visit_count'a göre sıralanır.
+-- Tamamen özel (select herkese açık değil). Bilerek DELETE policy'si yok —
+-- MVP kapsamı dışı, kullanıcı ziyaret geçmişini şu an temizleyemiyor.
+-- ============================================================
+
+create table if not exists public.visited_places (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  place_id text not null,
+  name text not null,
+  address text,
+  latitude double precision not null,
+  longitude double precision not null,
+  rating double precision,
+  user_rating_count integer,
+  types jsonb not null default '[]'::jsonb,
+  visit_count integer not null default 1,
+  last_visited_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  unique (user_id, place_id)
+);
+
+alter table public.visited_places enable row level security;
+
+drop policy if exists visited_places_select_own on public.visited_places;
+create policy visited_places_select_own
+  on public.visited_places for select
+  using (auth.uid() = user_id);
+
+drop policy if exists visited_places_insert_own on public.visited_places;
+create policy visited_places_insert_own
+  on public.visited_places for insert
+  with check (auth.uid() = user_id);
+
+drop policy if exists visited_places_update_own on public.visited_places;
+create policy visited_places_update_own
+  on public.visited_places for update
+  using (auth.uid() = user_id);
+-- Not: profiles_update_own'daki gibi WITH CHECK yazılmadı; USING ikisi için
+-- de kullanılır, yani visit_count artırılırken bile user_id değiştirilemez.

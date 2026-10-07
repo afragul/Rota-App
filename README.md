@@ -36,6 +36,8 @@ Sistem bu tercihlere göre:
 - Serbest metinden tema çözümleme (kullanıcı "ne istediğini" yazınca uygun temalara eşleme)
 - Serbest metin belirsiz/çelişkiliyse (ör. "bir şeyler yapalım") LLM doğrudan plan yerine bir netleştirme sorusu döndürür (`app/services/planner.py::check_ambiguity`); aynı `POST /plan`, istemci `previous_question`/`clarification_answer` alanlarıyla cevabı geri gönderince bir tur sonra plana devam edilir. Backend stateless kalır — sunucu tarafında konuşma geçmişi tutulmaz.
 - Plan kurulurken çekilen mekan havuzu (`DayPlan.place_pool`) tamamen yanıta dahil edilir — frontend'in durak değiştirme/ekleme özelliği bu havuzu yeniden kullanır, ek bir Google çağrısı yapmaz.
+- `PlanRequest.anchor_place` verilirse (ana sayfada "sık gidilen yer" seçilince) o mekan, LLM'in seçimine bakılmaksızın her alternatife durak olarak garanti edilir (`orchestrator.py::_ensure_anchor_stop`); anchor'ın koordinatları zaten bilindiği için geocoding'e gerek kalmaz.
+- Rate limiting (`slowapi`), opsiyonel Supabase JWT doğrulaması, sunucu taraflı misafir plan kotası, CORS ve girdi sınırları — bkz. `CLAUDE.md`'deki "Security" bölümü.
 
 ### Frontend
 
@@ -45,10 +47,12 @@ Sistem bu tercihlere göre:
 - Canlı navigasyon modu, plan detayında durakları sil/sırala/değiştir/taşı/ekle
 - **Supabase Auth** (tamamen frontend'de, backend'den bağımsız): giriş opsiyonel (misafir modu var), kayıt/giriş/şifremi unuttum, kullanıcı adı
 - Rota kaydetme/favorileme ve link ile paylaşım (Supabase `saved_plans` tablosu — bkz. "Frontend kurulumu")
+- Mekan bazlı favorileme (`favorite_places` tablosu, rotadan bağımsız) — plan detayındaki her durakta kalp ikonu, Hesabım'da liste, "+ Durak ekle" sayfasında "Favorilerimden ekle" sekmesiyle herhangi bir rotaya eklenebilir
+- Sık gidilen yerler: "Ulaşıldı" işaretlemeleri `visited_places` tablosuna kalıcı ziyaret sayacı olarak işlenir; ana sayfada en sık gidilen 5 mekan tıklanabilir kart olarak çıkar, tıklanınca o mekan garanti rotaya girer (tercihler yine sorulur)
 
 Henüz **yapılmadı** (yol haritasında, bkz. `ROADMAP.md`'nin "Sırada / fikir aşamasında" bölümü):
 
-- Mekan fotoğrafı/yorumları, mekan bazlı favorileme, sık gidilenler, profil fotoğrafı, backend'in Supabase JWT doğrulaması
+- Mekan fotoğrafı/yorumları, mekan değiştirirken AI'ya serbest metinle sorma, profil fotoğrafı
 
 ## Teknoloji yığını
 
@@ -90,7 +94,7 @@ cp .env.example .env
 | `DEBUG` | hayır | Varsayılan: `false`. `true` olmadıkça `/docs`, `/redoc`, `/openapi.json` kapalıdır. |
 | `RATE_LIMIT_ENABLED` | hayır | Varsayılan: `true`. IP bazlı rate limiting'i (`slowapi`) kapatmak için `false` (testlerde kapalı) |
 | `GUEST_DAILY_PLAN_LIMIT` | hayır | Varsayılan: `3`. Giriş yapmamış kullanıcıların günlük `/plan` kotası (sunucu tarafı; `frontend/src/guestLimit.ts`'teki `GUEST_PLAN_LIMIT` ile aynı tutulmalı) |
-| `SUPABASE_JWT_SECRET` | hayır | Supabase Dashboard → Project Settings → API → JWT Settings → "Legacy JWT Secret". Ayarlanmazsa her istek misafir sayılır (giriş yapmış kullanıcılar da günlük kotaya tabi olur) |
+| `SUPABASE_JWT_SECRET` | hayır | Supabase Dashboard → Project Settings → API → JWT Settings — projende "JWT Secret" (legacy, HS256) varsa onu, yoksa "Signing Keys" altındaki aktif anahtarın PEM formatlı genel anahtarını ("-----BEGIN PUBLIC KEY-----" ile başlar, ES256/RS256) kopyala; hangisi olduğu otomatik anlaşılır. Ayarlanmazsa her istek misafir sayılır (giriş yapmış kullanıcılar da günlük kotaya tabi olur) |
 | `CORS_ORIGINS` | hayır | Varsayılan: `http://localhost:5173`. Virgülle ayrılmış izinli origin listesi; prod'da frontend'in gerçek adresiyle değiştirilmeli |
 
 `PLACES_API_KEY`, `GEOCODING_API_KEY`, `ROUTES_API_KEY` ve `GROQ_API_KEY` olmadan uygulama açılışta hata verir (bilinçli tercih, bkz. `app/core/config.py`).

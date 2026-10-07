@@ -9,13 +9,14 @@ interface Props {
   planId: string
   session: Session | null
   onClose: () => void
+  onCreateOwn: () => void
 }
 
 type State = { status: 'loading' } | { status: 'error' } | { status: 'ready'; plan: SavedPlan }
 
 // Link ile paylaşılan bir rotayı salt-okunur gösterir; App'in normal Shell/view
 // akışının dışında, tek başına bir sayfa (bkz. App.tsx'teki ?shared= kontrolü).
-export function SharedPlanScreen({ planId, session, onClose }: Props) {
+export function SharedPlanScreen({ planId, session, onClose, onCreateOwn }: Props) {
   const [state, setState] = useState<State>({ status: 'loading' })
   const [deleting, setDeleting] = useState(false)
 
@@ -46,7 +47,7 @@ export function SharedPlanScreen({ planId, session, onClose }: Props) {
       <div className="fixed inset-0 z-[60] bg-background flex flex-col items-center justify-center gap-4 p-margin text-center">
         <Icon name="link_off" className="text-[40px] text-text-secondary" />
         <p className="font-body-md text-body-md text-ink">Bu rota artık mevcut değil.</p>
-        <button onClick={onClose} className="h-12 px-6 rounded-xl bg-plan-a text-on-primary font-label-md text-label-md">
+        <button onClick={onCreateOwn} className="h-12 px-6 rounded-xl bg-plan-a text-on-primary font-label-md text-label-md">
           Kendi rotanı oluştur
         </button>
       </div>
@@ -157,7 +158,7 @@ export function SharedPlanScreen({ planId, session, onClose }: Props) {
         </ol>
 
         <button
-          onClick={onClose}
+          onClick={onCreateOwn}
           className="h-12 rounded-xl bg-plan-a text-on-primary font-label-md text-label-md flex items-center justify-center gap-1.5"
         >
           <Icon name="add_road" className="text-[18px]" />

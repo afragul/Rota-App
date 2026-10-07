@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Icon } from '../components/Icon'
 import { BUDGETS, GROUPS, THEMES, TRAVEL_MODES } from '../meta'
 import type { Preferences } from '../prefs'
@@ -67,14 +67,32 @@ function Collapsible({
   )
 }
 
+// Başlangıç saati öneri: bir sonraki tam saat.
+function defaultStartTime(): string {
+  const h = (new Date().getHours() + 1) % 24
+  return `${String(h).padStart(2, '0')}:00`
+}
+
+// "HH:MM" + N saat -> "HH:MM" (gün içinde döner).
+function addHours(time: string, hours: number): string {
+  const [h, m] = time.split(':').map(Number)
+  const total = (h * 60 + m + hours * 60 + 24 * 60) % (24 * 60)
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
 export function PreferencesScreen({ prefs, onChange, onSubmit }: Props) {
   const set = <K extends keyof Preferences>(key: K, value: Preferences[K]) => onChange({ ...prefs, [key]: value })
   const group = GROUPS.find((g) => g.value === prefs.group)!
 
-  // Başlangıç saati: bir sonraki tam saat (tasarımdaki "13:00 - 16:00" ipucu).
-  const startHour = (new Date().getHours() + 1) % 24
-  const endHour = (startHour + prefs.duration) % 24
-  const hh = (h: number) => `${String(h).padStart(2, '0')}:00`
+  // Kullanıcı hiç dokunmadıysa önerilen saati gerçekten prefs'e yazar (sadece
+  // gösterip arkada göndermemek kafa karıştırıyordu — ne görülüyorsa o gönderilir).
+  useEffect(() => {
+    if (prefs.startTime === null) set('startTime', defaultStartTime())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const startTime = prefs.startTime ?? defaultStartTime()
+  const endTime = addHours(startTime, prefs.duration)
 
   const toggleCategory = (key: string) =>
     set('categories', prefs.categories.includes(key) ? prefs.categories.filter((c) => c !== key) : [...prefs.categories, key])
@@ -139,7 +157,18 @@ export function PreferencesScreen({ prefs, onChange, onSubmit }: Props) {
         <Card
           icon="schedule"
           title="2. Ne kadar vaktiniz var?"
-          right={<span className="font-label-sm text-label-sm text-primary font-medium">{hh(startHour)} - {hh(endHour)}</span>}
+          right={
+            <label className="flex items-center gap-1 font-label-sm text-label-sm text-primary font-medium">
+              <span className="sr-only">Başlangıç saati</span>
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => set('startTime', e.target.value)}
+                className="bg-transparent text-primary font-label-sm text-label-sm font-medium focus:outline-none"
+              />
+              <span>- {endTime}</span>
+            </label>
+          }
         >
           <div className="flex items-center justify-between bg-surface-container-low p-2.5 rounded-xl">
             <button

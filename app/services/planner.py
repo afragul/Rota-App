@@ -127,11 +127,18 @@ def _build_prompt(
             f"Kullanıcının cevabı: {request.clarification_answer}\n"
         )
 
+    start_time_line = ""
+    if request.start_time:
+        start_time_line = (
+            f"Başlangıç saati: {request.start_time} (ilk durağın varış saati tam bu "
+            "saatte ya da hemen sonrasında olsun, daha erken olmasın)\n"
+        )
+
     return f"""BAĞLAM
 Grup: {request.group_type.value}
 Bütçe: {request.budget.value}
 Toplam süre: {request.duration_hours} saat
-Hava durumu: {weather_summary}
+{start_time_line}Hava durumu: {weather_summary}
 Kullanıcının isteği: {request.free_text or "belirtilmedi"}
 {clarification_block}
 MEKAN LİSTESİ

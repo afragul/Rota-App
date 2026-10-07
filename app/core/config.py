@@ -45,8 +45,11 @@ class Settings(BaseSettings):
     # frontend/src/guestLimit.ts::GUEST_PLAN_LIMIT ile aynı değerde tutulmalı.
     guest_daily_plan_limit: int = 3
 
-    # Supabase JWT'sini doğrulamak için paylaşılan sır (Supabase Dashboard →
-    # Project Settings → API → JWT Settings → "Legacy JWT Secret", HS256).
+    # Supabase JWT'sini doğrulamak için: Supabase Dashboard → Project Settings
+    # → API → JWT Settings. İki türden biri olabilir, hangisi varsa o kopyalanır:
+    # eski/legacy "JWT Secret" (düz metin, HS256) ya da yeni "Signing Keys"
+    # özelliğinin PEM formatlı genel anahtarı ("-----BEGIN PUBLIC KEY-----" ile
+    # başlar, ES256/RS256) — app/core/auth.py bu önekten otomatik ayırt eder.
     # Ayarlanmazsa her istek misafir sayılır; backend auth'tan habersiz kalır.
     supabase_jwt_secret: SecretStr | None = None
 

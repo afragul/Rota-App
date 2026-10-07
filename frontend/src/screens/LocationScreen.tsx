@@ -1,17 +1,31 @@
+import type { Session } from '@supabase/supabase-js'
+import { useEffect, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { hasLocation, locationLabel, type Preferences } from '../prefs'
+import { listFrequentPlaces, type VisitedPlace } from '../visitedPlaces'
 
 interface Props {
   prefs: Preferences
   onChange: (p: Preferences) => void
   onContinue: () => void
+  // prefs'i güncelleyip aynı anda devam eden, atomik bir seçim — onChange +
+  // onContinue'yu art arda çağırmak prefs'in henüz güncellenmemiş (stale)
+  // haliyle onContinue'nun hasLocation kontrolüne takılmasına yol açardı.
+  onPickFrequent: (place: VisitedPlace) => void
+  session: Session | null
 }
 
 // Başlangıçta yalnızca şehir/semt seçilir. Kullanıcının GPS konumu burada
 // istenmez; plan çıktıktan sonra, ilk durağa nasıl gideceğini göstermek için
 // plan detayında kullanılır.
-export function LocationScreen({ prefs, onChange, onContinue }: Props) {
+export function LocationScreen({ prefs, onChange, onContinue, onPickFrequent, session }: Props) {
   const ready = hasLocation(prefs)
+  const [frequent, setFrequent] = useState<VisitedPlace[]>([])
+
+  useEffect(() => {
+    if (!session) return setFrequent([])
+    listFrequentPlaces(session.user.id).then(({ data }) => setFrequent(data ?? []))
+  }, [session])
 
   return (
     <form
@@ -57,12 +71,42 @@ export function LocationScreen({ prefs, onChange, onContinue }: Props) {
             type="text"
             autoFocus
             value={prefs.cityInput}
-            onChange={(e) => onChange({ ...prefs, cityInput: e.target.value })}
+            onChange={(e) => onChange({ ...prefs, cityInput: e.target.value, anchorPlace: null })}
             placeholder="Örn: Beşiktaş, Moda, Alsancak..."
             className="w-full h-12 pl-11 pr-4 bg-surface-container-low text-ink font-body-md text-body-md rounded-xl placeholder:text-text-secondary/70 focus:outline-none focus:bg-surface"
           />
         </div>
       </section>
+
+      {frequent.length > 0 && (
+        <section className="bg-surface rounded-2xl p-5 shadow-sm mb-6 flex flex-col gap-3">
+          <div className="flex flex-col min-w-0">
+            <h3 className="font-label-lg text-label-lg text-ink font-semibold">Sık Gidilen Yerlerin</h3>
+            <p className="font-body-sm text-body-sm text-text-secondary mt-0.5">
+              Birine dokun, o mekan rotana garanti girsin — süre/bütçe gibi tercihleri yine soracağız.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            {frequent.map((place) => (
+              <button
+                key={place.place_id}
+                type="button"
+                onClick={() => onPickFrequent(place)}
+                className="flex items-center gap-3 bg-surface-container-low rounded-xl p-3 text-left hover:bg-surface-container-high active:scale-[0.99] transition-all"
+              >
+                <Icon name="favorite" fill className="text-plan-a text-[20px] flex-shrink-0" />
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="font-label-md text-label-md text-ink truncate">{place.name}</span>
+                  {place.address && (
+                    <span className="font-body-sm text-body-sm text-text-secondary truncate">{place.address}</span>
+                  )}
+                </div>
+                <Icon name="arrow_forward" className="text-text-secondary text-[18px] flex-shrink-0" />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="bg-surface-container p-3.5 rounded-xl flex items-center gap-3 mt-1 mb-8">
         <Icon name="near_me" className="text-ink text-[20px] flex-shrink-0" />
