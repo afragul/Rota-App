@@ -405,3 +405,16 @@ async def test_belirsizlik_kontrolu_cokerse_plana_devam_edilir(fake_groq):
 
     assert plan.alternatives
     assert len(fake.calls) == 3
+
+
+@respx.mock
+async def test_max_alternatives_fazla_alternatifi_atar(fake_groq):
+    """Misafir için max_alternatives=1: LLM birden çok alternatif dönse de yalnızca biri kalır."""
+    fake_groq(PLAN_JSON)
+    _mock_all()
+
+    plan = await build_day_plan(
+        PlanRequest(city="Bursa", categories=["kafe"]), max_alternatives=1
+    )
+
+    assert len(plan.alternatives) == 1

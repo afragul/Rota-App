@@ -1,11 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, Query, Request
 from pydantic import Field
 
 from app.core.rate_limit import limiter
 from app.schemas.places import Place
-from app.services.places import PlacesServiceError, search_nearby
+from app.services.places import search_nearby
 
 router = APIRouter(
     prefix="/places",
@@ -27,16 +27,10 @@ async def get_nearby_places(
     max_results: Annotated[int, Query(ge=1, le=20, description="Maksimum sonuç sayısı")] = 10,
 ) -> list[Place]:
     """Verilen koordinatın çevresindeki mekânları döndürür."""
-    try:
-        return await search_nearby(
-            latitude=latitude,
-            longitude=longitude,
-            included_types=types,
-            radius=radius,
-            max_results=max_results,
-        )
-    except PlacesServiceError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from exc
+    return await search_nearby(
+        latitude=latitude,
+        longitude=longitude,
+        included_types=types,
+        radius=radius,
+        max_results=max_results,
+    )

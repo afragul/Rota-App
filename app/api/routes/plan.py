@@ -1,13 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Request
 
 from app.core.auth import get_optional_user_id
 from app.core.guest_limit import enforce_guest_plan_limit
 from app.core.rate_limit import limiter
 from app.schemas.plan import ClarificationNeeded, DayPlan, PlanRequest
-from app.services.geocoding import GeocodingServiceError
 from app.services.orchestrator import build_day_plan
-from app.services.places import PlacesServiceError
-from app.services.planner import PlannerServiceError
 
 router = APIRouter(
     prefix="/plan",
@@ -24,11 +21,6 @@ async def create_day_plan(
 ) -> DayPlan | ClarificationNeeded:
     """Kullanıcı girdilerinden günlük alternatif planlar üretir."""
     enforce_guest_plan_limit(request, user_id)
-    try:
-        return await build_day_plan(payload)
-    except GeocodingServiceError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    except PlacesServiceError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    except PlannerServiceError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    # Misafirler (giriş yapmamış) istek başına tek alternatif alır.
+    # Servis hataları app/api/errors.py'deki merkezi işleyicide 502'ye çevrilir.
+    return await build_day_plan(payload, max_alternatives=1 if user_id is None else None)
