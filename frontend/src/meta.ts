@@ -66,5 +66,5 @@ export function formatHours(minutes: number): string {
 // API çağrısı gerektirmez, zaten elimizdeki place_id ile kurulur.
 export function mapsUrl(place: { place_id: string; name: string | null; activity?: string }): string {
   const query = encodeURIComponent(place.name ?? place.activity ?? '')
-  return `https://www.google.com/maps/search/?api=1&query=${query}&query_place_id=${place.place_id}`
+  return `https://www.google.com/maps/search/?api=1&query=${query}&query_place_id=${encodeURIComponent(place.place_id)}`
 }

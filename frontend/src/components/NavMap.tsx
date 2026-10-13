@@ -59,7 +59,7 @@ export function NavMap({ segments, current, pos, follow, color, onUserPan }: Pro
       L.marker(seg.dest, {
         icon: L.divIcon({
           className: '',
-          html: `<div class="rota-pin" style="background:${color}">${seg.stopOrder}</div>`,
+          html: `<div class="rota-pin" style="background:${color}">${Number(seg.stopOrder)}</div>`,
           iconSize: [32, 32],
           iconAnchor: [16, 16],
         }),

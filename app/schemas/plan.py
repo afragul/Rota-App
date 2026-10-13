@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.core.themes import THEME_TYPES
 from app.schemas.places import Place
@@ -46,6 +46,9 @@ class AnchorPlace(BaseModel):
 
 class PlanRequest(BaseModel):
     """Kullanıcıdan gelen istek."""
+
+    # Baş/son boşluklar atılır: "   " gibi city değeri boş sayılıp reddedilir
+    model_config = ConfigDict(str_strip_whitespace=True)
 
     # Konum: latitude+longitude İKİLİSİ VEYA city verilmeli
     latitude: float | None = Field(default=None, ge=-90, le=90)

@@ -127,8 +127,14 @@ async def _determine_themes(request: PlanRequest) -> list[str]:
     return DEFAULT_THEMES
 
 
-async def build_day_plan(request: PlanRequest) -> DayPlan | ClarificationNeeded:
-    """Uçtan uca: (belirsizlik kontrolü) → konum çözümleme → hava+temalar → mekan havuzu → plan."""
+async def build_day_plan(
+    request: PlanRequest, max_alternatives: int | None = None
+) -> DayPlan | ClarificationNeeded:
+    """Uçtan uca: (belirsizlik kontrolü) → konum çözümleme → hava+temalar → mekan havuzu → plan.
+
+    max_alternatives verilirse (misafirler için 1) fazla alternatifler rota
+    hesabından ÖNCE atılır, böylece atılanlar için Routes çağrısı yapılmaz.
+    """
     # 0. free_text tek başına tema kaynağıysa ve bu ilk turdaysa (henüz bir
     # cevap gelmemişse) belirsizlik kontrolü yap. Geocoding/hava/mekan
     # aramasından ÖNCE çalışır ki belirsizse o çağrılar hiç yapılmasın.
@@ -178,6 +184,8 @@ async def build_day_plan(request: PlanRequest) -> DayPlan | ClarificationNeeded:
 
     # 4. Planı kur
     plan = await create_plan(request, pool, weather.summary)
+    if max_alternatives is not None:
+        plan.alternatives = plan.alternatives[:max_alternatives]
 
     # LLM anchor mekanını seçmemiş olabilir; seçmediyse zorla ekle (bkz.
     # docstring) — legs hesaplamasından (add_routes) ÖNCE, ki eklenen durağın

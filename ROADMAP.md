@@ -171,6 +171,63 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   anahtarları), `ApproachRequest`/`LegStop` koordinat aralıkları,
   `LegsRequest.stops` en fazla 25, `/geocode` `address` en fazla 200,
   `/places/nearby` `types` en fazla 5 eleman + `[a-z_]+` deseni.
+- [x] **Misafire istek başına tek alternatif**: `/plan`, giriş yapmamış
+  isteklerde `build_day_plan(..., max_alternatives=1)` çağırır; fazla
+  alternatifler rota hesabından ÖNCE atılır (atılanlar için Routes çağrısı
+  yapılmaz). Giriş yapanlar 2-3 alternatif almaya devam eder. LLM yine birden
+  çok alternatif üretir (Groq maliyeti değişmez; prompt'u misafir için "1
+  alternatif" yapmak ileride düşünülebilir). `LimitScreen.tsx`'teki "3 rota
+  oluşturabilirsin" metni buna göre güncellenmedi.
+- [x] **`city` boşluk kontrolü**: `PlanRequest` baş/son boşlukları atar
+  (`str_strip_whitespace`); yalnızca boşluktan oluşan `city` koordinat yokken
+  reddedilir. Anchor (sık gidilen yer) akışı koordinatla geldiği için etkilenmez.
+- [x] **XSS (harita pin'leri)**: `RouteMap.tsx`/`NavMap.tsx` `divIcon` HTML'ine
+  `stop.order`/`seg.stopOrder` ham basıyordu; `saved_plans.stops` herkesin
+  yazabildiği jsonb olduğundan paylaşım linki üzerinden depolanmış XSS
+  mümkündü. Artık `Number(...)` ile basılıyor; `mapsUrl` içinde `place_id`
+  `encodeURIComponent` ile kodlanıyor.
+- [ ] **`/route/legs` maliyet sınırı**: TRANSIT modunda 25 durak = 24 ayrı
+  Routes çağrısı (30 istek/dk ile IP başına ~720 çağrı/dk); durak üst sınırı
+  düşürülmeli (10-12) ve bu endpoint'e de misafir kotası düşünülmeli.
+- [ ] **Küçük girdi sıkılaştırmaları**: `AnchorPlace` `place_id`/`name`
+  `min_length`, `types` öğelerine `max_length`; `LegStop.order` `ge=1, le=25`
+  ve benzersizlik; `PlanRequest`'e `extra="forbid"`.
+- [ ] **Content-Security-Policy**: `index.html`/web sunucusuna CSP (Leaflet
+  karoları ve Supabase adresleri listelenerek); yanlış ayar haritayı/girişi
+  bozabileceği için test edilerek eklenmeli.
+- [ ] **Rate limit — canlıda doğrulama**: limitler IP'ye göre sayıldığı için
+  proxy gerçek istemci IP'sini (`X-Forwarded-For`) iletmeli; uvicorn'a
+  dışarıdan doğrudan erişilememeli (`--forwarded-allow-ips='*'` yalnızca
+  proxy arkasında güvenli, yoksa istemci başlığı uydurup limiti atlatır).
+  Canlıda iki farklı ağdan `/plan` deneyip sayaçların ayrı işlediği elle
+  doğrulanmalı.
+- [ ] **Rate limit — bellek içi sayaçlar**: slowapi ve `guest_limit.py` sayaçları
+  bellekte; yeniden başlatmada sıfırlanır, çoklu worker'da limit worker sayısı
+  kadar gevşer. Tek worker ile başla; büyürse Redis.
+- [ ] **Rate limit — giriş yapanlar için günlük üst sınır**: giriş yapan
+  kullanıcı `/plan`'da yalnızca dakikada 10 ile sınırlı, günlük sınır yok;
+  hesap açmak ücretsiz olduğundan maliyet riski var. Kullanıcı bazlı günlük
+  sınır düşünülebilir.
+- [ ] **Rate limit — Supabase giriş/kayıt/şifre sıfırlama**: bu istekler
+  backend'e uğramaz, backend limiti uygulanmaz; Supabase panelindeki
+  Auth rate limit ayarları kontrol edilmeli. (Misafir kotası IP'ye bağlı:
+  paylaşılan ağlarda kota paylaşılır, VPN ile aşılabilir — kabul edilen sınır;
+  asıl koruma Google/Groq harcama limitleri.)
+- [ ] **IDOR / sahiplik — `saved_plans` listelenebiliyor**: `saved_plans_select_all`
+  (`using (true)`) yüzünden anon anahtarı olan herkes tablonun tamamını
+  (`/rest/v1/saved_plans?select=*`) çekebilir; "uuid tahmin edilemez" gizlilik
+  modeli yalnızca satır tek tek aranıyorsa geçerli, tablo listelenebiliyorsa
+  boşa düşer. Tüm kullanıcıların planları ve `user_id`'leri okunabilir.
+  Düzeltme: select'i sahibine kapat (`auth.uid() = user_id`) ve paylaşım
+  linkini `security definer` bir fonksiyonla (`get_shared_plan(id uuid)` →
+  tek satır, `search_path` sabit) sun; `fetchSharedPlan` buna geçer.
+  Canlıdan önce yapılmalı.
+- [x] **IDOR / sahiplik — diğer tablolar**: `favorite_places`/`visited_places`
+  select-insert-update-delete yalnızca sahibine (`auth.uid() = user_id`),
+  `profiles` ve `saved_plans` yazma işlemleri de sahibine kısıtlı; frontend'in
+  `userId`'yi kendisinin göndermesi güvenlik sağlamıyor, asıl zorlama RLS'te.
+  Backend'de kullanıcıya ait kaynak olmadığı için IDOR yüzeyi yok. (Not:
+  `profiles` select herkese açık, kullanıcı adları kamuya açık kabul edildi.)
 - [x] **CORS ve yayın yapılandırması**: `CORSMiddleware` eklendi
   (`Settings.cors_origins`, virgülle ayrılmış, varsayılan dev origin'i);
   `/docs`, `/redoc`, `/openapi.json` artık `DEBUG=false` iken (yayın
@@ -195,28 +252,177 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
 - [x] **API anahtarı kısıtları ve bütçe uyarısı**: Google Cloud konsolunda
   anahtar kısıtları ve Google/Groq'ta kota + bütçe alarmı kuruldu (manuel,
   kod değişikliği değil).
-- [ ] **Sırların yönetimi**: `.env` git'te değil (`.gitignore`), ama yayın
-  ortamında ortam değişkeni/secret manager kullanılacak; sızmış olabilecek
-  anahtarlar yenilensin.
+- [x] **Merkezi hata yönetimi**: `app/api/errors.py::register_exception_handlers`
+  (`main.py`'de kayıtlı). Tüm `*ServiceError`'lar (geocoding, places, planner,
+  routes, weather) tek işleyicide `502 {"detail": ...}` olur; route'lardaki
+  tekrarlayan `try/except` kaldırıldı (`plan`, `route`, `geocoding`, `places`;
+  `weather` kendi bağlamlı log'u için olduğu gibi bırakıldı). Yakalanmayan
+  her hata `500 {"detail": "Beklenmeyen bir hata oluştu"}` döner; ayrıntı
+  istemciye gitmez ve log'a yalnızca hata türü + yol yazılır (`str(exc)` bilerek
+  yok: httpx hataları URL/key taşıyabilir). Testler: `tests/test_error_handlers.py`.
+  Bilinen sınır: Starlette 500'leri CORS katmanının dışından döndürür, yani
+  farklı origin'den gelen tarayıcı 500'ü CORS hatası gibi görebilir (aynı
+  adres mimarisinde sorun değil). Uvicorn yine de yakalanmayan hatanın tam
+  traceback'ini kendi log'una yazar; bu çıktı log toplama hizmetine gidiyorsa
+  hassas veri taraması düşünülmeli.
+- [x] **Geocoding anahtarı log'a sızıyordu**: Geocoding key'i query string'de
+  gittiği için Google 4xx/5xx dönünce `geocoding.py` `str(exc)`'i log'luyordu ve
+  `HTTPStatusError` mesajı tam URL'yi (key dahil) taşıdığından anahtar log'a
+  yazılıyordu. Artık yalnızca hata türü ve durum kodu loglanıyor; regresyon
+  testi `tests/test_geocoding_service.py::test_hata_logunda_api_key_gecmez`.
+  Places/Routes key'i header'da, Groq SDK ile gittiği için etkilenmiyordu.
+- [ ] **Sırların yönetimi**: `.env` git'te değil (`.gitignore`; git geçmişinde
+  de yok, kodda sabit anahtar yok, anahtarlar `SecretStr`), ama yayın
+  ortamında ortam değişkeni/secret manager kullanılacak (Dockerfile yazılırken
+  `.dockerignore` ile `.env` imaja girmemeli); sızmış olabilecek anahtarlar
+  yenilensin; CI kurulunca commit'lerde sır taraması (ör. `gitleaks`).
 
 ### Yayın için gerekli altyapı
 
+- [ ] **Yayın mimarisi kararı — frontend ve API aynı adreste**: web sunucusu
+  (Nginx/Caddy) `/` için `frontend/dist`'i verir, `/api/*`'i `/api` önekini
+  silerek backend'e (`:8000`) iletir (Vite dev proxy'sinin canlı karşılığı;
+  frontend zaten göreli `/api/...` kullanıyor). Aynı origin olduğu için CORS
+  devreye girmez; yine de `CORS_ORIGINS` canlı adrese ayarlanır, `localhost`
+  çıkarılır. Proxy gerçek istemci IP'sini `X-Forwarded-For` ile iletmeli,
+  yoksa rate limit ve misafir kotası tüm kullanıcılar için tek IP sayar.
+  Birden çok worker çalıştırılırsa misafir sayacı worker başına ayrı tutulur
+  (bellek içi) — tek worker ya da Redis.
+- [ ] **Barındırma, alan adı ve bütçe kararı (açık)**: henüz seçilmedi.
+  HTTPS sertifikası ücretsiz (Let's Encrypt; Caddy otomatik alır/yeniler,
+  Nginx'te Certbot, Render/Railway/Vercel gibi hizmetlerde kendiliğinden
+  gelir). Ücretli olabilecekler: alan adı (IP adresine sertifika alınamaz;
+  yıllık küçük bir ücret) ve barındırma (ücretsiz katmanlar sınırlı/uyuyabilir,
+  VPS aylık ücretli). Test için barındırma hizmetinin ücretsiz alt adresi
+  yeterli; gerçek kullanıcıya açarken kendi alan adı alınmalı (alt adres
+  güven vermez, sonradan adres değişirse paylaşım linkleri bozulur). Karar
+  verilince Dockerfile/web sunucusu ayarı buna göre yazılacak (aşağıdaki
+  "Deploy" maddesi).
+- [ ] **HTTPS kontrolleri (canlıya alınca)**: sertifika geçerliliği ve
+  otomatik yenileme, `http://` → `https://` yönlendirmesi, `Strict-Transport-Security`
+  başlığı (önce kısa süreyle), tarayıcı Console'da mixed content olmaması
+  (`http://` taraması), `uvicorn --proxy-headers` ile `X-Forwarded-Proto`/`-For`
+  iletimi. Konum izni (`navigator.geolocation`) yalnızca HTTPS'te çalıştığı
+  için navigasyon modu telefonda canlı adreste ayrıca denenmeli; Supabase
+  e-posta bağlantıları (`https` canlı adres) de kontrol edilmeli.
+- [ ] **Supabase canlı ayarları**: ücretli pakete geçiş ve yedekleme, Site
+  URL/Redirect URLs'e canlı adres (localhost çıkarılır), e-posta doğrulama,
+  canlı için kendi SMTP'si (varsayılan e-posta servisi çok düşük limitli),
+  `SUPABASE_JWT_SECRET`'in canlı ortamda doldurulması (boşsa herkes misafir).
+  Yedekleme: otomatik yedeklerin açık olduğunu panelden doğrula ve ayrı bir
+  test projesinde bir kez geri yüklemeyi dene (yedekleme kapsamı/saklama süresi
+  pakete göre değişir, güncel koşullar Supabase sayfasından doğrulanmalı).
+  PITR, kendi `pg_dump` kopyası ve yazılı felaket planı kullanıcı sayısı
+  artınca değerlendirilecek. `.env` içeriğinin kopyası da güvenli bir yerde
+  (şifre yöneticisi/secret yöneticisi) tutulmalı.
 - [ ] **Deploy**: backend için `Dockerfile` (şu an yok) ve bir barındırma
   seçimi; frontend `vite build` çıktısının statik barındırılması; ortam
   başına (`dev`/`prod`) ayrı Supabase projesi ve API anahtarları.
 - [ ] **CI**: GitHub Actions ile `ruff check`, `pytest`, frontend `tsc -b` ve
   `oxlint` (şu an hiçbiri otomatik koşmuyor, `.github/` yok).
+- [ ] **Bağımlılık taraması (dependency scanning)**: bilinen güvenlik
+  açıkları için düzenli ve otomatik tarama.
+  - Frontend: `npm audit` (canlıya giden paketlerde `--omit=dev` ile 0 açık,
+    2026-10-13). Geliştirme araçlarında `braces` (yüksek, yığın taşması DoS)
+    raporlanıyor; zincir `braces` → `micromatch`/`chokidar` → `tailwindcss` 3.x.
+    Düzeltme Tailwind 4'e geçişi (büyük sürüm, arayüzü etkileyebilir)
+    gerektiriyor; yalnızca derleme/geliştirme zamanında çalıştığı için acil
+    değil, Tailwind yükseltmesi yapılırken çözülecek.
+  - Backend: `pip-audit` henüz kurulu değil/çalıştırılmadı. `pyproject.toml`'daki
+    sürümler sabit değil ve kilit dosyası yok (`uv.lock`/`requirements.txt`),
+    yani canlıda kurulacak sürüm kuruluma göre değişir; sürümleri sabitleyen
+    bir kilit dosyası üretilmeli.
+  - Otomasyon: CI kurulunca (yukarıdaki CI maddesi) `npm audit` ve `pip-audit`
+    her değişiklikte koşsun; GitHub Dependabot için ayar dosyası eklensin
+    (açık bir pakette otomatik güncelleme önerisi açar).
 - [ ] **Hata izleme ve log**: backend log'larının toplanması, frontend için
   hata raporlama (ör. Sentry); LLM/Google hata oranlarının izlenmesi.
 - [ ] **`/health` kapsamı**: şu an yalnızca "ayakta" döner; yayın ortamında
   bağımlılık durumunu (en azından anahtarların tanımlı olması) da yansıtsın.
+- [ ] **Log yapısı**: her isteğe bir istek numarası (request id) verilip log
+  satırlarına yazılsın; log biçimi canlıda yapılandırılmış (JSON) olabilir.
+  Şu an düz metin, yalnızca konsola, seviye sabit `INFO`.
+- [ ] **Güvenlik olayları için audit log**: şu an hiçbiri kaydedilmiyor.
+  `warning` olarak (IP + yol + olay; token'ın kendisi ASLA) şunlar yazılmalı:
+  misafir kotası aşıldı (`guest_limit.py`), rate limit aşıldı (slowapi'nin
+  varsayılan işleyicisi log yazmıyor), geçersiz/süresi dolmuş JWT
+  (`auth.py` sessizce `None` döndürüyor). Giriş yapmış kullanıcının `/plan`
+  isteği kimlik (`sub`) ile kaydedilmeli mi, KVKK değerlendirmesiyle birlikte
+  karar verilecek. Kaydet/sil/favori gibi veri değişiklikleri backend'e
+  uğramaz; bunların izi Supabase panelindeki Auth/veritabanı log'larındadır
+  (saklama süresi plana bağlı, kontrol edilmeli). Uvicorn erişim log'unun
+  proxy arkasında doğru istemci IP'sini yazdığı doğrulanmalı.
+- [ ] **Log'a girenlerin temizlenmesi**: kullanıcı metni (`geocoding.py` adres,
+  `orchestrator.py` şehir) satır sonu karakterleri temizlenerek yazılmalı (log
+  injection); koordinatlar (`weather.py`, `orchestrator.py`) ve LLM yanıtından
+  alıntı (`planner.py`, ilk 300 karakter; kullanıcı notu içerebilir) kişisel
+  veri sayılabileceğinden mümkünse kaba tutulmalı ya da loglanmamalı; log
+  saklama süresi belirlenmeli.
 
 ### Kullanıcıya dönük
 
 - [ ] **Gizlilik politikası ve konum izni metni**: konum yalnızca tarayıcıda
   kullanılıp Routes API'ye gönderiliyor; ne toplandığı/saklandığı açıkça
   yazılsın. Hesap silme (Supabase kullanıcısı ve `saved_plans` kayıtları)
-  için bir yol düşünülmeli.
+  için bir yol düşünülmeli. Ayrıntısı aşağıdaki KVKK maddelerinde.
+
+#### KVKK (6698 sayılı Kanun) hazırlığı
+
+Not: bu bölüm bir veri envanteri ve yapılacaklar listesidir, hukuki görüş
+değildir. Metinler ve yükümlülüklerin kapsamı (açık rıza gerekip gerekmediği,
+VERBİS kaydı, yurt dışı aktarım şartları) bir hukuk uzmanıyla netleştirilmeli.
+
+**Veri envanteri (koddan çıkarıldı):**
+
+| Veri | Nerede | Kaynak |
+|---|---|---|
+| E-posta, şifre (Supabase Auth'ta), kullanıcı adı | Supabase `auth.users`, `profiles` | Kayıt |
+| Kaydedilen planlar (durak, konum, `user_id`) | Supabase `saved_plans` | Kullanıcı |
+| Favori mekanlar (ad, adres, koordinat) | Supabase `favorite_places` | Kullanıcı |
+| Ziyaret geçmişi (mekan, koordinat, ziyaret sayısı, son ziyaret zamanı) | Supabase `visited_places` | "Ulaşıldı" işaretlemesi |
+| Şehir/adres metni, koordinat, serbest metin, tercihler | Backend isteği; Google/Groq/Open-Meteo'ya iletilir; kısmen log'a düşer | Plan formu |
+| IP adresi | Rate limit ve misafir kotası (bellekte), uvicorn erişim log'u | Her istek |
+| Anlık cihaz konumu (navigasyon) | `watchPosition` → `/route/approach` → Google Routes; kodda kalıcı saklandığı yer görülmedi | Cihaz |
+| Oturum token'ı, tema, misafir plan sayacı | Tarayıcı `localStorage` (çerez yok) | İstemci |
+
+**Üçüncü taraflar / yurt dışı aktarım:** Google (Geocoding, Places, Routes),
+Groq (serbest metin, tercihler, mekan listesi LLM'e gider), Open-Meteo
+(koordinat), Supabase (hesap ve kayıtlar). Her birinin sunucu bölgesi ve
+sözleşme koşulları kontrol edilip aydınlatma metninde yazılmalı; yurt dışına
+aktarım şartları hukuken değerlendirilmeli. Supabase projesinin bölgesi
+(AB/ABD vb.) seçilmiş mi bakılmalı.
+
+**Yapılacaklar:**
+- [ ] **Aydınlatma metni**: veri sorumlusu kimliği ve iletişim, hangi verinin
+  hangi amaçla ve hangi hukuki sebeple işlendiği, kimlere aktarıldığı, saklama
+  süresi, ilgili kişi hakları ve başvuru yolu. Kayıt/giriş ekranından ve
+  alt bilgiden erişilebilir olmalı.
+- [ ] **Konum için bilgilendirme/rıza metni**: şehir yazarak plan, cihaz
+  konumu (navigasyon) ve ziyaret geçmişi ayrı ayrı anlatılsın; konumun açık
+  rıza gerektirip gerektirmediği hukuki olarak netleştirilsin. Tarayıcı konum
+  izni isteminden önce kısa bir açıklama gösterilsin.
+- [ ] **Silme hakkı**: hesap silme akışı (Supabase kullanıcısı, `profiles`,
+  `saved_plans`, `favorite_places`, `visited_places`; tabloların hepsi
+  `on delete cascade` ile `auth.users`'a bağlı, yani kullanıcı silinince
+  satırlar gider; ama bu akışı kullanıcı kendi başına başlatamıyor). Ayrıca
+  `visited_places` için bilerek DELETE policy'si yok (`schema.sql`); kullanıcı
+  ziyaret geçmişini temizleyemiyor, bu silme hakkıyla çelişir.
+- [ ] **Erişim / taşınabilirlik**: kullanıcının kendi verisini görebilmesi ve
+  dışa aktarabilmesi (Hesabım'dan JSON indir gibi).
+- [ ] **Paylaşılan planlar**: `saved_plans` şu an herkese listelenebilir (bkz.
+  "IDOR / sahiplik" maddesi); bu durum kişisel veri güvenliği yükümlülüğü
+  açısından da ele alınmalı, kullanıcı paylaşımı kapatabilmeli.
+- [ ] **Saklama süreleri**: log'lar, `visited_places` (ziyaret geçmişi),
+  kullanılmayan hesaplar için süre belirlenip uygulanmalı.
+- [ ] **Veri ihlali süreci**: sızıntı olursa kim, neyi, kime ne zamana kadar
+  bildirir (mevzuattaki süreler hukuki olarak doğrulanmalı); log ve audit
+  kayıtları buna dayanak olacak.
+- [ ] **VERBİS / kayıt yükümlülüğü**: uygulamanın işletici statüsüne göre
+  gerekip gerekmediği hukuken kontrol edilmeli.
+- [ ] **Sağlayıcı sözleşmeleri**: Google, Groq, Supabase için veri işleme
+  şartları/DPA incelenmeli; Groq'a giden kullanıcı serbest metninin
+  eğitimde kullanılmadığı ayarı doğrulanmalı.
+- [ ] **Çocuklar**: yaş sınırı ve ebeveyn onayı gerekliliği değerlendirilmeli.
 - [ ] **Frontend testleri**: giriş, misafir limiti ve plan akışının testi yok;
   en azından `guestLimit.ts` ve `authErrorText` için birim testleri.
 - [ ] **LLM çıktı kalitesi**: planların Türkçe dönmesi prompt'ta zorlandı

@@ -84,3 +84,9 @@ def test_anchor_place_gecersiz_girdiler_reddedilir():
     ):
         with pytest.raises(ValidationError):
             AnchorPlace(**{**base, **kwargs})
+
+
+def test_bos_veya_bosluk_city_reddedilir():
+    """Koordinat yokken city yalnızca boşluktan oluşuyorsa konum verilmemiş sayılır."""
+    with pytest.raises(ValidationError):
+        PlanRequest(city="   ")
