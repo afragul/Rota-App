@@ -38,7 +38,12 @@ async def geocode_address(address: str) -> GeocodeResult:
             response.raise_for_status()
             data = response.json()
     except httpx.HTTPError as exc:
-        logger.warning("Geocoding API çağrısı başarısız: %s", exc)
+        # str(exc) HTTPStatusError'da tam URL'yi taşır; key query string'de olduğu için
+        # log'a sızar. Yalnızca hata türü ve (varsa) durum kodu yazılır.
+        status_code = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        logger.warning(
+            "Geocoding API çağrısı başarısız: %s (durum=%s)", type(exc).__name__, status_code
+        )
         raise GeocodingServiceError("Adres/şehir bilgisine ulaşılamadı") from exc
 
     # Google, hatalı istekte de 200 dönüp durumu body'deki "status" alanına yazar

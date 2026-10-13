@@ -75,3 +75,16 @@ async def test_istek_dogru_kuruluyor():
     assert params["address"] == "Bursa"
     assert params["language"] == "tr"
     assert params["key"]
+
+
+@respx.mock
+async def test_hata_logunda_api_key_gecmez(caplog):
+    """Google 4xx dönünce httpx hata mesajı URL'yi (key dahil) taşır; log'a sızmamalı."""
+    respx.get(_url()).mock(return_value=httpx.Response(403))
+    key = get_settings().geocoding_api_key.get_secret_value()
+
+    with caplog.at_level("WARNING"), pytest.raises(GeocodingServiceError):
+        await geocode_address("Bursa")
+
+    assert caplog.text  # log gerçekten yazılmış olmalı, yoksa test anlamsız
+    assert key not in caplog.text
