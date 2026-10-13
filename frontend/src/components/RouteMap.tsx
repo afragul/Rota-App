@@ -61,7 +61,7 @@ export function RouteMap({ alternative, color, origin, approach, arrivedOrders }
           className: '',
           html: done
             ? `<div class="rota-pin rota-pin-done" style="background:${color}"><span class="material-symbols-outlined" style="font-size:16px">check</span></div>`
-            : `<div class="rota-pin" style="background:${color}">${stop.order}</div>`,
+            : `<div class="rota-pin" style="background:${color}">${Number(stop.order)}</div>`,
           iconSize: [32, 32],
           iconAnchor: [16, 16],
         }),
