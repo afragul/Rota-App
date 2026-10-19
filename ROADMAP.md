@@ -27,12 +27,21 @@ Backend önce tamamlanıp sonra frontend'e geçilecek şekilde sıralandı. READ
 
 DESIGN.md'deki ekranlara birebir karşılık gelir.
 
-- [ ] Teknoloji seçimi (framework, state yönetimi, harita kütüphanesi).
-- [ ] Konum/şehir seçimi ekranı (Milestone 1'deki geocoding'e bağlı).
-- [ ] Tercihler ekranı (bütçe, grup tipi, süre, aktivite türü chip'leri, serbest metin).
-- [ ] Sonuç ekranı — alternatif plan kartları + hava rozeti.
-- [ ] Plan detay ekranı — durak zaman çizelgesi + harita (Milestone 1'deki rota verisine bağlı).
-- [ ] Hata/boş durum ekranları (mekân bulunamadı, plan üretilemedi, hava alınamadı).
+- [x] **Teknoloji seçimi**: Vite + React + TypeScript + Tailwind + Leaflet.
+  Router kütüphanesi yok — `App.tsx` elle yazılmış bir state machine
+  (`view` union'ı), state yönetimi React'in kendi `useState`/prop drilling'i
+  (ayrı bir kütüphane yok). Bkz. `CLAUDE.md`'deki "Frontend" bölümü.
+- [x] **Konum/şehir seçimi ekranı**: `screens/LocationScreen.tsx` — şehir
+  arama + (giriş yapılmışsa) "Sık Gidilen Yerlerin" hızlı seçim kartları.
+- [x] **Tercihler ekranı**: `screens/PreferencesScreen.tsx` — grup tipi,
+  süre, bütçe, kategori chip'leri, serbest metin, başlangıç saati seçimi.
+- [x] **Sonuç ekranı**: alternatif plan kartları + hava rozeti —
+  `screens/ResultsScreen.tsx`.
+- [x] **Plan detay ekranı**: `screens/DetailScreen.tsx` — durak zaman
+  çizelgesi + harita (`components/RouteMap.tsx`, Leaflet).
+- [x] **Hata/boş durum ekranları**: mekân bulunamadı/plan üretilemedi
+  (`components/ErrorBanner.tsx`), netleştirme sorusu (`screens/ClarifyScreen.tsx`),
+  misafir limiti (`screens/LimitScreen.tsx`).
 
 ## İnovasyon — Hesap, favoriler ve rota düzenleme
 
@@ -129,14 +138,6 @@ kullanıyor.
 - [ ] **Profil fotoğrafı**: Supabase Storage'da yeni bir bucket + RLS
   policy'leri gerekiyor, henüz kurulmadı.
 
-<<<<<<< feat/toggle_db
- Updated upstream
-- [ ] **Backend'in Supabase JWT doğrulaması**: şu an hiçbir endpoint
-  kullanıcı kimliği istemiyor; kullanıcıya özel backend mantığı gerekirse
-  (ör. plan geçmişini backend'in de görmesi) eklenecek.
-
-=======
->>>>>>> local
 ## Milestone 4 — Public'e açılış hazırlığı
 
 Uygulama şu an tek kullanıcılı/demo kullanımına göre kuruldu. Herkese açık
@@ -171,6 +172,8 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   anahtarları), `ApproachRequest`/`LegStop` koordinat aralıkları,
   `LegsRequest.stops` en fazla 25, `/geocode` `address` en fazla 200,
   `/places/nearby` `types` en fazla 5 eleman + `[a-z_]+` deseni.
+<<<<<<< feat/toggle_db
+=======
 - [x] **Misafire istek başına tek alternatif**: `/plan`, giriş yapmamış
   isteklerde `build_day_plan(..., max_alternatives=1)` çağırır; fazla
   alternatifler rota hesabından ÖNCE atılır (atılanlar için Routes çağrısı
@@ -186,15 +189,43 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   yazabildiği jsonb olduğundan paylaşım linki üzerinden depolanmış XSS
   mümkündü. Artık `Number(...)` ile basılıyor; `mapsUrl` içinde `place_id`
   `encodeURIComponent` ile kodlanıyor.
-- [ ] **`/route/legs` maliyet sınırı**: TRANSIT modunda 25 durak = 24 ayrı
-  Routes çağrısı (30 istek/dk ile IP başına ~720 çağrı/dk); durak üst sınırı
-  düşürülmeli (10-12) ve bu endpoint'e de misafir kotası düşünülmeli.
-- [ ] **Küçük girdi sıkılaştırmaları**: `AnchorPlace` `place_id`/`name`
-  `min_length`, `types` öğelerine `max_length`; `LegStop.order` `ge=1, le=25`
-  ve benzersizlik; `PlanRequest`'e `extra="forbid"`.
-- [ ] **Content-Security-Policy**: `index.html`/web sunucusuna CSP (Leaflet
-  karoları ve Supabase adresleri listelenerek); yanlış ayar haritayı/girişi
-  bozabileceği için test edilerek eklenmeli.
+- [x] **`/route/legs` maliyet sınırı**: `MAX_LEG_STOPS` 25 → 12
+  (`app/schemas/plan.py`) — TRANSIT modunda artık en fazla 11 ayrı Routes
+  çağrısı tetiklenebiliyor (önceden 24). Ayrıca bu endpoint'e `/plan`'daki
+  günlük misafir kotasından ayrı, kendi sayacı eklendi: `guest_limit.py`'deki
+  `enforce_guest_legs_limit` + yeni `guest_daily_legs_limit` ayarı
+  (varsayılan 20 — durak düzenleme, plan üretmekten çok daha sık tetiklenen
+  bir aksiyon olduğu için `guest_daily_plan_limit`'ten kasıtlı olarak daha
+  yüksek). `recompute_legs` artık `get_optional_user_id`'yi de kullanıyor;
+  bunun doğru çalışması için frontend'in `fetchLegs`'i artık `accessToken`
+  alıp `Authorization` header'ında gönderiyor (`api.ts`, `DetailScreen.tsx`)
+  — aksi halde giriş yapmış kullanıcılar da yanlışlıkla misafir sayılırdı.
+  Testler: `tests/test_guest_limit.py`, `tests/test_route_endpoint.py`.
+- [x] **Küçük girdi sıkılaştırmaları**: `AnchorPlace.place_id`/`.name`'e
+  `min_length=1`, `.types` listesindeki her öğeye `max_length=50`;
+  `LegStop.order`'a `ge=1, le=MAX_LEG_STOPS`; `LegsRequest`'e order'ların
+  benzersiz olmasını zorlayan bir `field_validator`; `PlanRequest`'e
+  `extra="forbid"` (tanımsız bir alan artık sessizce yok sayılmıyor, 422
+  dönüyor). Testler: `tests/test_plan_schema.py`.
+- [x] **Content-Security-Policy**: `frontend/vite.config.ts`'e yalnızca
+  **build** sırasında (`apply: 'build'`) `index.html`'e bir CSP meta tag'i
+  enjekte eden bir plugin eklendi — dev sunucusunda eklenmiyor, çünkü
+  `@vitejs/plugin-react`'in Fast Refresh preamble'ı satır içi bir `<script>`
+  enjekte ediyor ve bu, `script-src`'de `'unsafe-inline'` olmadan HMR'ı
+  kırardı; build çıktısında böyle bir inline script olmadığı için orada
+  `script-src 'self'` sıkı kalabiliyor (önceki XSS açığının asıl vektörü
+  olan satır içi olay işleyicilerine — `onerror=`, `onclick=` vb. — karşı
+  ek bir savunma katmanı). `style-src` Tailwind/React'in olası satır içi
+  stilleri için `'unsafe-inline'` içeriyor (script-src'de yok — asıl risk
+  orada). `img-src` Leaflet karoları için `https://*.tile.openstreetmap.org`,
+  `connect-src` Supabase için `https://*.supabase.co` (+ `'self'`, `/api/*`
+  zaten aynı origin) içeriyor. `frame-ancestors` meta tag'de desteklenmediği
+  için (yalnızca HTTP header) eklenmedi — gerçek web sunucusu kurulunca not
+  edildi. Test: `npm run build` sonrası `frontend/dist`'i backend'e proxy'leyen
+  yerel bir sunucu üzerinden Playwright ile gerçek bir plan üretimi (harita
+  dahil, `RouteMap.tsx`'teki Leaflet karoları ve özel `divIcon` pin'leri
+  sorunsuz yüklendi) ve Supabase'e giden bir `fetch` denendi — hiçbir CSP
+  ihlali görülmedi.
 - [ ] **Rate limit — canlıda doğrulama**: limitler IP'ye göre sayıldığı için
   proxy gerçek istemci IP'sini (`X-Forwarded-For`) iletmeli; uvicorn'a
   dışarıdan doğrudan erişilememeli (`--forwarded-allow-ips='*'` yalnızca
@@ -213,21 +244,26 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   Auth rate limit ayarları kontrol edilmeli. (Misafir kotası IP'ye bağlı:
   paylaşılan ağlarda kota paylaşılır, VPN ile aşılabilir — kabul edilen sınır;
   asıl koruma Google/Groq harcama limitleri.)
-- [ ] **IDOR / sahiplik — `saved_plans` listelenebiliyor**: `saved_plans_select_all`
-  (`using (true)`) yüzünden anon anahtarı olan herkes tablonun tamamını
-  (`/rest/v1/saved_plans?select=*`) çekebilir; "uuid tahmin edilemez" gizlilik
-  modeli yalnızca satır tek tek aranıyorsa geçerli, tablo listelenebiliyorsa
-  boşa düşer. Tüm kullanıcıların planları ve `user_id`'leri okunabilir.
-  Düzeltme: select'i sahibine kapat (`auth.uid() = user_id`) ve paylaşım
-  linkini `security definer` bir fonksiyonla (`get_shared_plan(id uuid)` →
-  tek satır, `search_path` sabit) sun; `fetchSharedPlan` buna geçer.
-  Canlıdan önce yapılmalı.
+- [x] **IDOR / sahiplik — `saved_plans` listelenebiliyordu (düzeltildi,
+  2026-10-19)**: `saved_plans_select_all` (`using (true)`) yüzünden anon
+  anahtarı olan herkes tablonun tamamını (`/rest/v1/saved_plans?select=*`)
+  çekebiliyordu; "uuid tahmin edilemez" gizlilik modeli yalnızca satır tek
+  tek aranıyorsa geçerliydi, tablo listelenebildiği için boşa düşüyordu.
+  Düzeltme: `saved_plans_select_own` policy'siyle select sahibine kapatıldı
+  (`auth.uid() = user_id`); paylaşım linki artık `get_shared_plan(plan_id
+  uuid)` adlı `SECURITY DEFINER` bir fonksiyonla sunuluyor (RLS'i bilerek
+  atlar ama sadece tek bir id için, `search_path` sabit —
+  `supabase/schema.sql`). `frontend/src/savedPlans.ts::fetchSharedPlan`
+  artık ham `select` yerine `supabase.rpc('get_shared_plan', ...)` çağırıyor.
+  **Supabase'de `supabase/schema.sql`'in tamamının tekrar çalıştırılması
+  gerekiyor** (yeni policy + fonksiyon panelde henüz yok).
 - [x] **IDOR / sahiplik — diğer tablolar**: `favorite_places`/`visited_places`
   select-insert-update-delete yalnızca sahibine (`auth.uid() = user_id`),
   `profiles` ve `saved_plans` yazma işlemleri de sahibine kısıtlı; frontend'in
   `userId`'yi kendisinin göndermesi güvenlik sağlamıyor, asıl zorlama RLS'te.
   Backend'de kullanıcıya ait kaynak olmadığı için IDOR yüzeyi yok. (Not:
   `profiles` select herkese açık, kullanıcı adları kamuya açık kabul edildi.)
+>>>>>>> local
 - [x] **CORS ve yayın yapılandırması**: `CORSMiddleware` eklendi
   (`Settings.cors_origins`, virgülle ayrılmış, varsayılan dev origin'i);
   `/docs`, `/redoc`, `/openapi.json` artık `DEBUG=false` iken (yayın
@@ -364,6 +400,9 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
 - [ ] **Gizlilik politikası ve konum izni metni**: konum yalnızca tarayıcıda
   kullanılıp Routes API'ye gönderiliyor; ne toplandığı/saklandığı açıkça
   yazılsın. Hesap silme (Supabase kullanıcısı ve `saved_plans` kayıtları)
+<<<<<<< feat/toggle_db
+  için bir yol düşünülmeli.
+=======
   için bir yol düşünülmeli. Ayrıntısı aşağıdaki KVKK maddelerinde.
 
 #### KVKK (6698 sayılı Kanun) hazırlığı
@@ -409,9 +448,11 @@ aktarım şartları hukuken değerlendirilmeli. Supabase projesinin bölgesi
   ziyaret geçmişini temizleyemiyor, bu silme hakkıyla çelişir.
 - [ ] **Erişim / taşınabilirlik**: kullanıcının kendi verisini görebilmesi ve
   dışa aktarabilmesi (Hesabım'dan JSON indir gibi).
-- [ ] **Paylaşılan planlar**: `saved_plans` şu an herkese listelenebilir (bkz.
-  "IDOR / sahiplik" maddesi); bu durum kişisel veri güvenliği yükümlülüğü
-  açısından da ele alınmalı, kullanıcı paylaşımı kapatabilmeli.
+- [ ] **Paylaşılan planlar**: toptan listelenebilme sorunu düzeltildi (bkz.
+  "IDOR / sahiplik" maddesi), ama kullanıcının paylaştığı bir planı
+  "paylaşımdan kaldır" diye ayrı bir seçeneği yok — şu an tek yol favoriden
+  çıkarıp (`deleteSavedPlan`) planı tamamen silmek. KVKK açısından bunun
+  yeterli olup olmadığı değerlendirilmeli.
 - [ ] **Saklama süreleri**: log'lar, `visited_places` (ziyaret geçmişi),
   kullanılmayan hesaplar için süre belirlenip uygulanmalı.
 - [ ] **Veri ihlali süreci**: sızıntı olursa kim, neyi, kime ne zamana kadar
@@ -423,6 +464,7 @@ aktarım şartları hukuken değerlendirilmeli. Supabase projesinin bölgesi
   şartları/DPA incelenmeli; Groq'a giden kullanıcı serbest metninin
   eğitimde kullanılmadığı ayarı doğrulanmalı.
 - [ ] **Çocuklar**: yaş sınırı ve ebeveyn onayı gerekliliği değerlendirilmeli.
+>>>>>>> local
 - [ ] **Frontend testleri**: giriş, misafir limiti ve plan akışının testi yok;
   en azından `guestLimit.ts` ve `authErrorText` için birim testleri.
 - [ ] **LLM çıktı kalitesi**: planların Türkçe dönmesi prompt'ta zorlandı

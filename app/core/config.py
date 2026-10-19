@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     # frontend/src/guestLimit.ts::GUEST_PLAN_LIMIT ile aynı değerde tutulmalı.
     guest_daily_plan_limit: int = 3
 
+    # Giriş yapmamış kullanıcıların günlük /route/legs (durak sil/sırala/ekle)
+    # çağrı kotası. Bu, plan üretmekten çok daha sık tetiklenen bir aksiyon
+    # olduğu için guest_daily_plan_limit'ten kasıtlı olarak daha yüksek.
+    guest_daily_legs_limit: int = 20
+
     # Supabase JWT'sini doğrulamak için: Supabase Dashboard → Project Settings
     # → API → JWT Settings. İki türden biri olabilir, hangisi varsa o kopyalanır:
     # eski/legacy "JWT Secret" (düz metin, HS256) ya da yeni "Signing Keys"

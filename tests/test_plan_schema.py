@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.plan import AnchorPlace, PlanRequest
+from app.schemas.plan import AnchorPlace, LegsRequest, LegStop, PlanRequest
 
 
 def test_koordinatla_gecerli():
@@ -81,12 +81,48 @@ def test_anchor_place_gecersiz_girdiler_reddedilir():
         {"place_id": "a" * 301},
         {"address": "a" * 301},
         {"types": ["cafe"] * 11},
+        {"place_id": ""},
+        {"name": ""},
+        {"types": ["a" * 51]},
     ):
         with pytest.raises(ValidationError):
             AnchorPlace(**{**base, **kwargs})
+<<<<<<< feat/toggle_db
+=======
 
 
 def test_bos_veya_bosluk_city_reddedilir():
     """Koordinat yokken city yalnızca boşluktan oluşuyorsa konum verilmemiş sayılır."""
     with pytest.raises(ValidationError):
         PlanRequest(city="   ")
+
+
+def test_plan_request_tanimsiz_alan_reddedilir():
+    """extra='forbid': tanımsız alan sessizce yok sayılmak yerine hata vermeli."""
+    with pytest.raises(ValidationError):
+        PlanRequest(city="Bursa", uydurma_alan="deger")
+
+
+def test_leg_stop_order_siniri():
+    for order in (0, -1, 26):
+        with pytest.raises(ValidationError):
+            LegStop(order=order, latitude=40.18, longitude=29.06)
+
+
+def test_legs_request_tekrar_eden_order_reddedilir():
+    stops = [
+        LegStop(order=1, latitude=40.18, longitude=29.06),
+        LegStop(order=1, latitude=40.19, longitude=29.07),
+    ]
+    with pytest.raises(ValidationError):
+        LegsRequest(stops=stops)
+
+
+def test_legs_request_benzersiz_order_gecerli():
+    stops = [
+        LegStop(order=1, latitude=40.18, longitude=29.06),
+        LegStop(order=2, latitude=40.19, longitude=29.07),
+    ]
+    request = LegsRequest(stops=stops)
+    assert len(request.stops) == 2
+>>>>>>> local
