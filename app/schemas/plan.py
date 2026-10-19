@@ -1,4 +1,5 @@
 from enum import StrEnum
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -7,7 +8,10 @@ from app.schemas.places import Place
 
 # Herkese açık API: LLM prompt'una ve Google çağrılarına giren alanlar sınırlı tutulur
 MAX_CATEGORIES = 6
-MAX_LEG_STOPS = 25
+# TRANSIT modunda N durak = N-1 ayrı Routes çağrısı (intermediates desteklenmiyor,
+# bkz. app/services/routes.py); 25 durakta bu 30/dakika'lık rate limit ile IP
+# başına ~720 Routes çağrısı/dakikaya çıkıyordu. 12'ye düşürüldü (ROADMAP.md).
+MAX_LEG_STOPS = 12
 
 
 class BudgetLevel(StrEnum):
@@ -36,12 +40,14 @@ class AnchorPlace(BaseModel):
     LLM'in seçimine güvenmeden bu mekanı her alternatife durak olarak ekler
     (bkz. app/services/orchestrator.py::_ensure_anchor_stop)."""
 
-    place_id: str = Field(max_length=300)
-    name: str = Field(max_length=200)
+    place_id: str = Field(min_length=1, max_length=300)
+    name: str = Field(min_length=1, max_length=200)
     address: str | None = Field(default=None, max_length=300)
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
-    types: list[str] = Field(default_factory=list, max_length=10)
+    types: list[Annotated[str, Field(min_length=1, max_length=50)]] = Field(
+        default_factory=list, max_length=10
+    )
 
 
 class PlanRequest(BaseModel):
@@ -49,6 +55,11 @@ class PlanRequest(BaseModel):
 
     # Baş/son boşluklar atılır: "   " gibi city değeri boş sayılıp reddedilir
     model_config = ConfigDict(str_strip_whitespace=True)
+
+    # Baş/son boşluklar atılır: "   " gibi city değeri boş sayılıp reddedilir.
+    # extra="forbid": tanımsız bir alan gönderilirse sessizce yok saymak yerine
+    # 422 döner — istemci/şema uyuşmazlığı fark edilmeden geçmesin diye.
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     # Konum: latitude+longitude İKİLİSİ VEYA city verilmeli
     latitude: float | None = Field(default=None, ge=-90, le=90)
@@ -195,7 +206,7 @@ class ApproachRoute(BaseModel):
 class LegStop(BaseModel):
     """Ayakları yeniden hesaplamak için gereken minimum durak bilgisi."""
 
-    order: int
+    order: int = Field(ge=1, le=MAX_LEG_STOPS)
     latitude: float = Field(ge=-90, le=90)
     longitude: float = Field(ge=-180, le=180)
 
@@ -205,6 +216,14 @@ class LegsRequest(BaseModel):
 
     stops: list[LegStop] = Field(max_length=MAX_LEG_STOPS)
     travel_mode: TravelMode = TravelMode.WALK
+
+    @field_validator("stops")
+    @classmethod
+    def _order_benzersiz_mi(cls, value: list[LegStop]) -> list[LegStop]:
+        orders = [s.order for s in value]
+        if len(set(orders)) != len(orders):
+            raise ValueError("Durak sırası (order) tekrar edemez")
+        return value
 
 
 class LegsResponse(BaseModel):

@@ -61,9 +61,16 @@ create trigger on_auth_user_created
 
 -- ============================================================
 -- saved_plans: kaydedilen/favorilenen rotalar, link ile paylaşım.
--- Gizlilik modeli: id (uuid) tahmin edilemez olduğu için select herkese
--- açık; sahiplik yalnızca insert/delete'te kontrol edilir. Bilerek UPDATE
--- policy'si yok — frontend hiçbir satırı güncellemiyor.
+-- ÖNEMLİ (2026-10-19'da düzeltildi): select ARTIK herkese açık DEĞİL,
+-- sadece sahibine. Eskiden "id tahmin edilemez" savunmasıyla select
+-- herkese açıktı (using (true)) ama bu, anon key'i olan HERKESİN tabloyu
+-- toptan listeleyip (select * from saved_plans) tüm kullanıcıların
+-- planlarını/user_id'lerini çekebilmesi demekti — tek satır aranırken
+-- "tahmin edilemez" savunması geçerli, tablo listelenebiliyorsa boşa
+-- düşüyordu (IDOR). Paylaşım linki artık RLS'i atlayan ama tek bir id'ye
+-- sabitlenmiş bir SECURITY DEFINER fonksiyonla (get_shared_plan) sunuluyor;
+-- frontend'in fetchSharedPlan'ı buna geçti. Bilerek UPDATE policy'si yok —
+-- frontend hiçbir satırı güncellemiyor.
 -- ============================================================
 
 create table if not exists public.saved_plans (
@@ -81,9 +88,10 @@ create table if not exists public.saved_plans (
 alter table public.saved_plans enable row level security;
 
 drop policy if exists saved_plans_select_all on public.saved_plans;
-create policy saved_plans_select_all
+drop policy if exists saved_plans_select_own on public.saved_plans;
+create policy saved_plans_select_own
   on public.saved_plans for select
-  using (true);
+  using (auth.uid() = user_id);
 
 drop policy if exists saved_plans_insert_own on public.saved_plans;
 create policy saved_plans_insert_own
@@ -94,6 +102,21 @@ drop policy if exists saved_plans_delete_own on public.saved_plans;
 create policy saved_plans_delete_own
   on public.saved_plans for delete
   using (auth.uid() = user_id);
+
+-- Paylaşım linki (?shared=<id>) RLS'i bilerek atlar ama SADECE tek bir id
+-- için — "id tahmin edilemez" gizlilik modeli artık burada, toptan listeye
+-- değil tek satır okumaya uygulanıyor. search_path sabit (hijack'e karşı).
+create or replace function public.get_shared_plan(plan_id uuid)
+returns setof public.saved_plans
+language sql
+security definer
+set search_path to 'public'
+stable
+as $function$
+  select * from public.saved_plans where id = plan_id;
+$function$;
+
+grant execute on function public.get_shared_plan(uuid) to anon, authenticated;
 
 -- ============================================================
 -- favorite_places: mekan bazlı favorileme (rota değil, tekil mekan).

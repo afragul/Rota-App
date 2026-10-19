@@ -69,13 +69,19 @@ function placeFromStop(stop: PlanStop, pool: Place[]): Place {
   }
 }
 
-async function legsFor(stops: PlanStop[], travelMode: TravelMode): Promise<{ legs: RouteLeg[]; ok: boolean }> {
+async function legsFor(
+  stops: PlanStop[],
+  travelMode: TravelMode,
+  accessToken?: string,
+): Promise<{ legs: RouteLeg[]; ok: boolean }> {
   const withCoords = stops.filter((st) => st.latitude != null && st.longitude != null)
   if (withCoords.length < 2) return { legs: [], ok: true }
   try {
     const legs = await fetchLegs(
       withCoords.map((st) => ({ order: st.order, latitude: st.latitude!, longitude: st.longitude! })),
       travelMode,
+      undefined,
+      accessToken,
     )
     return { legs, ok: legs.length > 0 }
   } catch {
@@ -360,7 +366,7 @@ export function DetailScreen({
     const renumbered = nextStops.map((st, i) => ({ ...st, order: i + 1 }))
     setArrived(new Set())
     setRecalculating(true)
-    const { legs, ok } = await legsFor(renumbered, travelMode)
+    const { legs, ok } = await legsFor(renumbered, travelMode, session?.access_token)
     onAlternativesChange([{ index, stops: renumbered, legs, routesAvailable: ok }])
     setRecalculating(false)
   }
@@ -405,7 +411,10 @@ export function DetailScreen({
     const toNext = [...toAlt.stops, stop].map((st, i) => ({ ...st, order: i + 1 }))
     setArrived(new Set())
     setRecalculating(true)
-    const [from, to] = await Promise.all([legsFor(fromNext, travelMode), legsFor(toNext, travelMode)])
+    const [from, to] = await Promise.all([
+      legsFor(fromNext, travelMode, session?.access_token),
+      legsFor(toNext, travelMode, session?.access_token),
+    ])
     onAlternativesChange([
       { index: fromIndex, stops: fromNext, legs: from.legs, routesAvailable: from.ok },
       { index: toIndex, stops: toNext, legs: to.legs, routesAvailable: to.ok },

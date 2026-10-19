@@ -37,7 +37,7 @@ Sistem bu tercihlere göre:
 - Serbest metin belirsiz/çelişkiliyse (ör. "bir şeyler yapalım") LLM doğrudan plan yerine bir netleştirme sorusu döndürür (`app/services/planner.py::check_ambiguity`); aynı `POST /plan`, istemci `previous_question`/`clarification_answer` alanlarıyla cevabı geri gönderince bir tur sonra plana devam edilir. Backend stateless kalır — sunucu tarafında konuşma geçmişi tutulmaz.
 - Plan kurulurken çekilen mekan havuzu (`DayPlan.place_pool`) tamamen yanıta dahil edilir — frontend'in durak değiştirme/ekleme özelliği bu havuzu yeniden kullanır, ek bir Google çağrısı yapmaz.
 - `PlanRequest.anchor_place` verilirse (ana sayfada "sık gidilen yer" seçilince) o mekan, LLM'in seçimine bakılmaksızın her alternatife durak olarak garanti edilir (`orchestrator.py::_ensure_anchor_stop`); anchor'ın koordinatları zaten bilindiği için geocoding'e gerek kalmaz.
-- Rate limiting (`slowapi`), opsiyonel Supabase JWT doğrulaması, sunucu taraflı misafir plan kotası, CORS ve girdi sınırları — bkz. `CLAUDE.md`'deki "Security" bölümü.
+- Rate limiting (`slowapi`), opsiyonel Supabase JWT doğrulaması, sunucu taraflı misafir plan kotası (`/plan`) ve ayrı bir misafir kotası (`/route/legs`), CORS, Content-Security-Policy (frontend build'inde) ve girdi sınırları — bkz. `CLAUDE.md`'deki "Security" bölümü.
 
 ### Frontend
 
@@ -49,6 +49,7 @@ Sistem bu tercihlere göre:
 - Rota kaydetme/favorileme ve link ile paylaşım (Supabase `saved_plans` tablosu — bkz. "Frontend kurulumu")
 - Mekan bazlı favorileme (`favorite_places` tablosu, rotadan bağımsız) — plan detayındaki her durakta kalp ikonu, Hesabım'da liste, "+ Durak ekle" sayfasında "Favorilerimden ekle" sekmesiyle herhangi bir rotaya eklenebilir
 - Sık gidilen yerler: "Ulaşıldı" işaretlemeleri `visited_places` tablosuna kalıcı ziyaret sayacı olarak işlenir; ana sayfada en sık gidilen 5 mekan tıklanabilir kart olarak çıkar, tıklanınca o mekan garanti rotaya girer (tercihler yine sorulur)
+- Production build'inde (`npm run build`) bir Content-Security-Policy meta tag'i — `npm run dev`'de yok (HMR'ı kırar), bkz. `frontend/vite.config.ts` ve `CLAUDE.md`'deki "Security" bölümü
 
 Henüz **yapılmadı** (yol haritasında, bkz. `ROADMAP.md`'nin "Sırada / fikir aşamasında" bölümü):
 
@@ -94,6 +95,7 @@ cp .env.example .env
 | `DEBUG` | hayır | Varsayılan: `false`. `true` olmadıkça `/docs`, `/redoc`, `/openapi.json` kapalıdır. |
 | `RATE_LIMIT_ENABLED` | hayır | Varsayılan: `true`. IP bazlı rate limiting'i (`slowapi`) kapatmak için `false` (testlerde kapalı) |
 | `GUEST_DAILY_PLAN_LIMIT` | hayır | Varsayılan: `3`. Giriş yapmamış kullanıcıların günlük `/plan` kotası (sunucu tarafı; `frontend/src/guestLimit.ts`'teki `GUEST_PLAN_LIMIT` ile aynı tutulmalı) |
+| `GUEST_DAILY_LEGS_LIMIT` | hayır | Varsayılan: `20`. Giriş yapmamış kullanıcıların günlük `/route/legs` (durak sil/sırala/ekle) kotası — `/plan`'dan ayrı bir sayaç, daha sık tetiklenen bir aksiyon olduğu için daha yüksek |
 | `SUPABASE_JWT_SECRET` | hayır | Supabase Dashboard → Project Settings → API → JWT Settings — projende "JWT Secret" (legacy, HS256) varsa onu, yoksa "Signing Keys" altındaki aktif anahtarın PEM formatlı genel anahtarını ("-----BEGIN PUBLIC KEY-----" ile başlar, ES256/RS256) kopyala; hangisi olduğu otomatik anlaşılır. Ayarlanmazsa her istek misafir sayılır (giriş yapmış kullanıcılar da günlük kotaya tabi olur) |
 | `CORS_ORIGINS` | hayır | Varsayılan: `http://localhost:5173`. Virgülle ayrılmış izinli origin listesi; prod'da frontend'in gerçek adresiyle değiştirilmeli |
 
@@ -211,15 +213,20 @@ Project Settings → API):
 
 Hesap/favoriler özelliği için Supabase projende **SQL Editor**'de
 [`supabase/schema.sql`](supabase/schema.sql) dosyasının tamamını çalıştır
-(bir kerelik) — `profiles` (kullanıcı adı; `auth.users` insert'inde trigger
-otomatik satır açar) ve `saved_plans` (kaydedilen/favorilenen rotalar, link
-ile paylaşım) tablolarını, RLS policy'lerini ve trigger'ı kurar.
+(bir kerelik) — dört tabloyu (`profiles`, `saved_plans`, `favorite_places`,
+`visited_places`), RLS policy'lerini, `handle_new_user` trigger'ını ve
+`get_shared_plan` fonksiyonunu kurar.
 
-İkisi de RLS açık; `profiles` herkese okunabilir/sahibi güncelleyebilir,
-`saved_plans` herkese okunabilir (gizlilik modeli linkteki tahmin edilemeyen
-uuid) ama sadece sahibi silebilir/ekleyebilir (hiç update policy'si yok).
-RLS kurulumu 2026-10-05'te `pg_policies`/`pg_class.relrowsecurity` üzerinden
-doğrulandı (bkz. ROADMAP.md Milestone 4).
+Dördünde de RLS açık. `profiles` select herkese açık (kullanıcı adları
+kamuya açık kabul edildi), güncelleme sadece sahibine. `saved_plans` select
+**sahibine kapalı** — eskiden "id tahmin edilemez" diye herkese açıktı ama
+bu, tabloyu toptan listeyen birinin tüm kullanıcıların planlarını
+görebilmesi demekti (IDOR, 2026-10-19'da düzeltildi); paylaşım linki artık
+RLS'i atlayan ama tek bir id'ye sabitlenmiş `get_shared_plan` adlı bir
+`SECURITY DEFINER` fonksiyonla sunuluyor. `favorite_places`/`visited_places`
+tamamen özel (select de sahibine kapalı) — bunlarda paylaşım kavramı yok.
+RLS kurulumu `pg_policies`/`pg_class.relrowsecurity` üzerinden doğrulandı
+(bkz. ROADMAP.md Milestone 4).
 
 Dev server'ı çalıştır:
 

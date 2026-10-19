@@ -147,6 +147,11 @@ exceptions into `HTTPException`s; all real logic lives in services.
   doesn't already contain it. The anchor's own coordinates are used as the
   plan's `latitude`/`longitude` client-side (see `prefs.ts::toRequest`), so
   geocoding is skipped entirely when an anchor is set.
+- `PlanRequest.start_time` ("HH:MM", optional) is appended to the LLM
+  prompt as a plain instruction line in `planner.py::_build_prompt`
+  ("ilk durağın varış saati bu saatte ya da hemen sonrasında olsun") —
+  there's no separate enforcement step like the anchor place has; it's
+  trusted to the LLM. Omitted entirely from the prompt when not set.
 - Each service module defines its own `*ServiceError` exception; routes
   catch these and convert to `502` responses. Follow this pattern for new
   external integrations.
@@ -184,15 +189,50 @@ fans out to several paid Google calls plus a Groq call per request:
   On rejection it raises `429` with an `X-Guest-Limit-Reached` header so the
   frontend (`api.ts`'s `ApiError.guestLimit`) can tell this apart from a
   generic `slowapi` rate-limit `429` and route the user to the right screen
-  instead of a generic error.
+  instead of a generic error. `enforce_guest_legs_limit` is the same pattern
+  for `POST /route/legs` with its own counter and setting
+  (`guest_daily_legs_limit`, default 20, higher than the plan limit since
+  stop-editing happens far more often per session than full plan
+  generation) — needed because a single `TRANSIT`-mode call to this
+  endpoint can trigger up to `MAX_LEG_STOPS - 1` separate Routes API calls
+  (`app/schemas/plan.py::MAX_LEG_STOPS`, 12 — deliberately lowered from 25
+  for this reason). For this guest/logged-in distinction to work correctly
+  here, the frontend's `fetchLegs` (`api.ts`) must be passed an
+  `accessToken`, same as `createPlan` — `DetailScreen.tsx` passes
+  `session?.access_token` into every `fetchLegs` call.
 - [app/main.py](app/main.py)'s `create_app()` adds `CORSMiddleware`
   (origins from `cors_origins`) and only enables `/docs`, `/redoc`,
   `/openapi.json` when `settings.debug` is true — they're closed by default.
-- [supabase/schema.sql](supabase/schema.sql) is the source of truth for the
-  `profiles`/`saved_plans` tables, their RLS policies, and the
-  `handle_new_user` trigger — apply it in the Supabase SQL Editor rather
-  than clicking it together in the dashboard, and keep it in sync with
-  whatever the dashboard ends up with.
+- [supabase/schema.sql](supabase/schema.sql) is the source of truth for
+  all four Supabase tables (`profiles`, `saved_plans`, `favorite_places`,
+  `visited_places`), their RLS policies, the `handle_new_user` trigger, and
+  the `get_shared_plan` function — apply it in the Supabase SQL Editor
+  rather than clicking it together in the dashboard, and keep it in sync
+  with whatever the dashboard ends up with. `favorite_places`/
+  `visited_places` are private (select scoped to `auth.uid() = user_id`) —
+  there's no sharing concept for a single favorited/visited place.
+  `saved_plans`'s select is *also* owner-only now (fixed 2026-10-19): it
+  used to be `using (true)` on the theory that the row id (an unguessable
+  UUID) was itself the access control, but that only holds if a row can
+  only be looked up one at a time — anyone with the anon key could `select
+  *` the whole table and enumerate every user's plans. The share-link flow
+  (`?shared=<id>`) now goes through `get_shared_plan(plan_id uuid)`, a
+  `SECURITY DEFINER` function (fixed `search_path`) that intentionally
+  bypasses RLS but only for a single row by id — `savedPlans.ts::fetchSharedPlan`
+  calls it via `supabase.rpc(...)` instead of a raw `.from('saved_plans').select()`.
+- [frontend/vite.config.ts](frontend/vite.config.ts)'s `cspPlugin` injects a
+  `Content-Security-Policy` meta tag into `index.html`, but only for
+  `npm run build` (`apply: 'build'`), not `npm run dev`: the dev server's
+  Fast Refresh preamble needs an inline `<script>` that a strict
+  `script-src` would block. `script-src` itself has no `'unsafe-inline'`
+  (defense-in-depth against the same inline-event-handler vector the
+  Leaflet pin XSS fix above closed); `style-src` does, for
+  Tailwind/React's inline styles. `img-src` allows
+  `https://*.tile.openstreetmap.org` (Leaflet tiles), `connect-src` allows
+  `https://*.supabase.co`. Verified with a Playwright smoke test against a
+  real `npm run build` output (map + a live Supabase fetch, zero CSP
+  console violations) — re-verify the same way if you touch this plugin or
+  add a new external resource.
 
 ## Adding a new endpoint/service
 
@@ -208,20 +248,20 @@ fans out to several paid Google calls plus a Groq call per request:
 ## Frontend
 
 `frontend/src/App.tsx` is a hand-rolled state machine: a single `view`
-union (`{ name: 'location' | 'prefs' | 'loading' | 'clarify' | 'error' |
-'results' | 'detail' | 'navigate' | 'account' }`) drives which screen under
-`frontend/src/screens/` renders inside `components/Shell.tsx`; there is no
-router library. `plan: DayPlan | null` is the one source of truth for the
-current plan and is lifted to `App.tsx`; screens receive it and report
-changes back up via callbacks (e.g. `DetailScreen`'s
+union (`{ name: 'location' | 'prefs' | 'loading' | 'limit' | 'clarify' |
+'error' | 'results' | 'detail' | 'navigate' | 'account' }`) drives which
+screen under `frontend/src/screens/` renders inside `components/Shell.tsx`;
+there is no router library. `plan: DayPlan | null` is the one source of
+truth for the current plan and is lifted to `App.tsx`; screens receive it
+and report changes back up via callbacks (e.g. `DetailScreen`'s
 `onAlternativesChange`) rather than owning their own copy.
 
 - **Auth is Supabase** (`supabase.ts`, `auth.ts`), and login is optional —
   a guest can use the app without an account. The frontend's own
   `guestLimit.ts` (a `localStorage` counter) is just UX: it shows the
   "limit reached" screen before even making a request. The backend enforces
-  the real cap server-side (see "Security" in the Architecture section
-  above) and only ever learns the user's identity when `App.tsx` passes
+  the real cap server-side (see "Security" above) and only ever learns
+  the user's identity when `App.tsx` passes
   `session.access_token` into `createPlan()`, which attaches it as a
   Bearer token — this happens for `/plan` only, not for every request.
 - `savedPlans.ts` wraps `supabase.from('saved_plans')` for the
@@ -229,6 +269,20 @@ changes back up via callbacks (e.g. `DetailScreen`'s
   UUID as the row id, not an ACL — the table is readable by anyone with the
   link, deletable only by the owner. `AccountScreen.tsx` and
   `SharedPlanScreen.tsx` are the two screens that touch this table.
+- `favoritePlaces.ts` and `visitedPlaces.ts` mirror `savedPlans.ts`'s thin
+  wrapper style (no error wrapping, just return the Supabase query builder)
+  for the two single-place tables. `favoritePlaces.ts` backs the heart icon
+  on each stop in `DetailScreen.tsx` and the "Favori Mekanlarım" list in
+  `AccountScreen.tsx`. `visitedPlaces.ts::recordVisit` is called
+  (fire-and-forget, non-critical) whenever `DetailScreen.tsx`'s "Ulaşıldı"
+  toggle transitions a stop to done — it upserts a per-place visit counter,
+  which `LocationScreen.tsx` reads to show "Sık Gidilen Yerlerin" on the
+  home screen. Tapping one of those sets `Preferences.anchorPlace` and
+  jumps straight to `prefs` (see `PlanRequest.anchor_place` above) via a
+  dedicated `onPickFrequent` callback in `App.tsx` — deliberately not
+  composed from the existing `onChange`+`onContinue` pair, since calling
+  both synchronously would read `onContinue`'s stale `prefs` closure before
+  React re-renders.
 - `api.ts` holds thin `fetch('/api/...')` wrappers (one per backend
   endpoint) that throw `ApiError` on non-2xx or network failure; screens
   call these instead of using `fetch` directly. The `/api` prefix is
@@ -247,7 +301,10 @@ changes back up via callbacks (e.g. `DetailScreen`'s
   `plan.place_pool` — never calls Places or the LLM again), and the
   "Ulaşıldı" (arrived) toggle, which only dims a stop, never removes it.
   Keep new stop-editing features here consistent with that zero-extra-cost
-  constraint unless told otherwise.
+  constraint unless told otherwise. `arrived` itself is still purely local
+  `useState` (resets on stop edits/alternative switch) — only the
+  false→true transition has a side effect (`visitedPlaces.ts::recordVisit`),
+  so don't assume the set reflects any server state.
 - `screens/NavigationScreen.tsx` + `nav.ts` + `components/NavMap.tsx`
   implement live turn-by-turn navigation using `watchPosition`, computing
   progress against the already-fetched route polyline client-side; it only

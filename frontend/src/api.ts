@@ -81,14 +81,26 @@ export interface LegStop {
 }
 
 // Durak silindiğinde/sırası değiştiğinde ayakları (mesafe/süre/çizgi) yeniden hesaplar.
-export async function fetchLegs(stops: LegStop[], travelMode: TravelMode, signal?: AbortSignal): Promise<RouteLeg[]> {
+// accessToken verilirse backend'in misafir günlük kotası (app/core/guest_limit.py) bu
+// kullanıcıya uygulanmaz — verilmezse giriş yapmış kullanıcı da misafir sayılır.
+export async function fetchLegs(
+  stops: LegStop[],
+  travelMode: TravelMode,
+  signal?: AbortSignal,
+  accessToken?: string,
+): Promise<RouteLeg[]> {
   const response = await fetch('/api/route/legs', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
     body: JSON.stringify({ stops, travel_mode: travelMode }),
     signal,
   })
-  if (!response.ok) throw new ApiError(response.status, 'Rota güncellenemedi')
+  if (!response.ok) {
+    throw new ApiError(response.status, 'Rota güncellenemedi', response.headers.get('X-Guest-Limit-Reached') === '1')
+  }
   const data = await response.json()
   return data.legs
 }

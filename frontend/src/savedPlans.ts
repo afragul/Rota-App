@@ -45,6 +45,9 @@ export function deleteSavedPlan(id: string) {
   return supabase.from('saved_plans').delete().eq('id', id)
 }
 
+// saved_plans artık select'te RLS'i sahibine kapatıyor (bkz. supabase/schema.sql);
+// paylaşım linki bu yüzden ham select değil, tek bir id'ye sabitlenmiş
+// SECURITY DEFINER bir Postgres fonksiyonu (get_shared_plan) üzerinden okur.
 export function fetchSharedPlan(id: string) {
-  return supabase.from('saved_plans').select('*').eq('id', id).single<SavedPlan>()
+  return supabase.rpc('get_shared_plan', { plan_id: id }).single<SavedPlan>()
 }
