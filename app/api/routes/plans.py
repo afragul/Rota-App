@@ -1,12 +1,9 @@
 import uuid
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, HTTPException, Request, Response, status
 
-from app.core.auth import require_user_id
+from app.api.deps import Session, UserId
 from app.core.rate_limit import limiter
-from app.db.session import get_session
 from app.schemas.saved_plan import (
     SavedPlanCreated,
     SavedPlanSummary,
@@ -20,9 +17,6 @@ router = APIRouter(prefix="/plans", tags=["plans"])
 
 # Girişsiz, link ile açılan paylaşım (id tahmin edilemez bir UUID; toplu listeleme yok).
 shared_router = APIRouter(prefix="/shared", tags=["plans"])
-
-UserId = Annotated[uuid.UUID, Depends(require_user_id)]
-Session = Annotated[AsyncSession, Depends(get_session)]
 
 
 @router.post("", response_model=SavedPlanCreated, status_code=status.HTTP_201_CREATED)
