@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     # Erişim token'ının ömrü (dakika).
     jwt_expire_minutes: int = 60
 
+    # Bir kullanıcının kaydedebileceği en fazla plan sayısı (depolama şişmesin).
+    max_saved_plans_per_user: int = 100
+
     # --- Veritabanı ---
     # PostgreSQL bağlantı adresi (asyncpg sürücüsü). Hesap/favori verisi
     # Supabase'ten buraya taşınırken kullanılacak; şimdilik opsiyonel.

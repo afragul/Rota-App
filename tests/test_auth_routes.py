@@ -1,39 +1,10 @@
-import httpx
 import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlalchemy.pool import StaticPool
 
 from app.core.auth import get_optional_user_id
-from app.db.base import Base
 from app.db.models import User
-from app.db.session import get_session
-from app.main import app
 
 REGISTER = {"email": "Ada@Example.com", "username": "ada", "password": "uzun-bir-sifre-1"}
-
-
-@pytest.fixture
-async def client():
-    """Bellekte SQLite ile çalışan istemci; gerçek Postgres gerekmez."""
-    engine = create_async_engine(
-        "sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
-    )
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-
-    async def _session():
-        async with factory() as session:
-            yield session
-
-    app.dependency_overrides[get_session] = _session
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
-        c.session_factory = factory
-        yield c
-    app.dependency_overrides.clear()
-    await engine.dispose()
 
 
 async def test_kayit_token_ve_kullanici_doner(client):
