@@ -32,6 +32,14 @@ type View =
   | { name: 'account'; from: View }
 
 function errorCopy(error: ApiError): { title: string; message: string } {
+  if (error.userLimit)
+    return {
+      title: 'Günlük hakkın doldu',
+      message: 'Bugün için rota oluşturma hakkın bitti, yarın tekrar deneyebilirsin. Kayıtlı rotaların ve favorilerin duruyor.',
+    }
+  // slowapi'nin dakikalık hız limiti (kota değil): kısa bir bekleyişle düzelir.
+  if (error.status === 429)
+    return { title: 'Çok fazla istek', message: 'Kısa bir süre bekleyip tekrar deneyin.' }
   if (error.status === 0) return { title: 'Sunucuya ulaşılamadı', message: 'Bağlantınızı kontrol edip tekrar deneyin.' }
   if (error.message.includes('mekan'))
     return { title: 'Bu bölgede uygun mekân bulunamadı', message: 'Konumu ya da aktivite türlerini değiştirmeyi deneyin.' }
@@ -231,7 +239,10 @@ export default function App() {
       {view.name === 'clarify' && (
         <ClarifyScreen question={view.question} onAnswer={(answer) => submit({ question: view.question, answer })} onBack={toPrefs} />
       )}
-      {view.name === 'error' && <ErrorBanner {...errorCopy(view.error)} onRetry={() => submit()} onBack={toPrefs} />}
+      {view.name === 'error' && (
+        // Günlük kota doluyken "Tekrar Dene" anlamsız (yarına kadar aynı sonucu verir).
+        <ErrorBanner {...errorCopy(view.error)} onRetry={view.error.userLimit ? undefined : () => submit()} onBack={toPrefs} />
+      )}
       {view.name === 'results' && plan && (
         <ResultsScreen plan={plan} prefs={prefs} onOpen={(index) => setView({ name: 'detail', index })} onPrefs={toPrefs} />
       )}

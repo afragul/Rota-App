@@ -341,8 +341,8 @@ and report changes back up via callbacks (e.g. `DetailScreen`'s
   becomes visible, and on a `401`; across tabs it uses Web Locks plus the
   `storage` event. Only a `401` from `/auth/refresh` ends the session — network
   or `5xx` errors keep it and retry. `signIn`/`signUp`/`signOut`/
-  `updateUsername`/`changePassword` are plain exported functions that update
-  the store; there is no password-reset flow yet (needs SMTP). The frontend's
+  `updateUsername`/`changePassword`/`deleteAccount` are plain exported functions
+  that update the store; there is no password-reset flow yet (needs SMTP). The frontend's
   own `guestLimit.ts` (a `localStorage` counter) is just UX: it shows the
   "limit reached" screen before even making a request. The backend enforces
   the real cap server-side (see "Security" above) and learns the user's
@@ -368,7 +368,7 @@ and report changes back up via callbacks (e.g. `DetailScreen`'s
   would read `onContinue`'s stale `prefs` closure before React re-renders.
 - `api.ts` holds thin `fetch('/api/...')` wrappers (one per backend
   endpoint) that throw `ApiError` on non-2xx or network failure; screens
-  call these instead of using `fetch` directly. `apiRequest()` is the shared
+  call these instead of using `fetch` directly. `ApiError` carries two distinct limit flags: `guestLimit` (`X-Guest-Limit-Reached` → "log in" screen) and `userLimit` (`X-User-Limit-Reached` → "daily quota used" message, no retry button). `apiRequest()` is the shared
   helper for the account/data endpoints: it surfaces the backend's (Turkish)
   `detail` as the error message and calls the registered unauthorized
   handler on a `401` with a token. The `/api` prefix is

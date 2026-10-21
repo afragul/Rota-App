@@ -244,9 +244,10 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   `UPDATE` ile atomik; gün Türkiye saatine göre; yeniden başlatmada sıfırlanmaz,
   çoklu worker'da paylaşılır. Gerçek Postgres'te 25 eşzamanlı oturumla denendi
   (tam 5 izin / 20 red / 0 hata, limit 5). Açık: limit değerleri tahmini, gerçek
-  kullanımla ayarlanmalı; kota dolunca frontend yalnızca genel hata metnini
-  gösteriyor (kalan hak / sıfırlanma saati gösterimi yok); misafir sayacı hâlâ
-  bellek içi (aşağıdaki "bellek içi sayaçlar" maddesi).
+  kullanımla ayarlanmalı; kota dolunca frontend anlaşılır bir ekran gösteriyor
+  ("Günlük hakkın doldu", "Tekrar Dene" gizli) ama kalan hak / sıfırlanma saati
+  gösterimi yok ve `/route/legs` kotası dolunca durak düzenlemede rota çizgisi
+  sessizce güncellenmiyor; misafir sayacı hâlâ bellek içi (aşağıdaki "bellek içi sayaçlar" maddesi).
 - [x] **Rate limit — giriş/kayıt**: auth artık backend'de; `/auth/register`
   `5/dakika`, `/auth/login` `10/dakika`, `/auth/refresh` `30/dakika`,
   `/me/password` `5/dakika` (IP bazlı). Açık kalan: hesap bazlı kilitleme
@@ -469,8 +470,9 @@ yazılmalı; yurt dışına aktarım şartları hukuken değerlendirilmeli.
   `favorite_places`, `visited_places`, `refresh_tokens`). **Backend yapıldı:**
   `DELETE /me` (şifre doğrulamalı, tek işlemde hepsini kalıcı siler — soft
   delete yok, e-posta/kullanıcı adı da tutulmaz; silinen hesabın erişim
-  token'ı anında 401 verir). **Açık:** Hesabım'da "Hesabı sil" düğmesi/onay
-  ekranı (frontend) ve yedeklerde/log'larda kalan verinin saklama süresi.
+  token'ı anında 401 verir). **Frontend yapıldı:** Hesabım'da "Hesabımı sil"
+  (ne silineceği yazılı, şifre ister, başarıda oturum kapanır ve bilgi mesajı
+  gösterilir). **Açık:** yedeklerde/log'larda kalan verinin saklama süresi.
   Ziyaret geçmişini temizleme **yapıldı**: `DELETE /visits` (tümü) ve
   `DELETE /visits/{place_id}`.
 - [ ] **Erişim / taşınabilirlik**: kullanıcının kendi verisini görebilmesi ve
@@ -541,7 +543,8 @@ Eski Supabase kullanıcıları taşınmadı (sıfırdan başlandı).
   yazılmalı (+ gönderen alan adı için SPF/DKIM, yoksa e-postalar spam'e düşer);
   `FRONTEND_BASE_URL` yayında gerçek adres olmalı; sıfırlama sayfası tarayıcıda
   elle denenmedi.
-- [ ] **Hesap silme (frontend) ve veri dışa aktarma**: `DELETE /me` backend'i yapıldı; arayüz ve dışa aktarma (`GET /me/export`) yok.
+- [x] **Hesap silme (frontend)**: `DELETE /me` ve Hesabım'daki "Hesabımı sil" akışı yapıldı.
+- Veri dışa aktarma bilinçli olarak yapılmıyor (karar: hiçbir şekilde).
 - [ ] **E-posta doğrulama**: yok; kayıt olan herkes e-postası doğrulanmadan
   oturum açıyor. SMTP ile birlikte değerlendirilmeli.
 - [ ] **Hesap bazlı brute-force koruması**: yalnızca IP bazlı limit var.

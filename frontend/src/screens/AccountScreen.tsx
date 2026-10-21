@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { ApiError } from '../api'
 import {
   changePassword,
+  deleteAccount,
   fetchAuthCapabilities,
   requestPasswordReset,
   resetPassword,
@@ -193,7 +194,83 @@ function ResetPasswordForm({ token, onDone, onCancel }: { token: string; onDone:
   )
 }
 
-function LoggedInPanel({ session, onOpenSaved }: { session: Session; onOpenSaved: (id: string) => void }) {
+// Geri alınamaz bir işlem: ne silineceği açıkça söylenir ve şifre istenir (çalınmış bir
+// oturum tek başına hesabı yok edemesin). Başarılıysa oturum kapanır, AccountScreen giriş
+// formuna döner ve `onDone` bilgi mesajını gösterir.
+function DeleteAccountForm({ onCancel, onDone }: { onCancel: () => void; onDone: () => void }) {
+  const [password, setPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitting(true)
+    setError(null)
+    try {
+      await deleteAccount(password)
+      onDone()
+    } catch (err) {
+      setError(authErrorText(err))
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <form onSubmit={submit} className="bg-error-container/40 rounded-xl p-space-md flex flex-col gap-space-sm">
+      <h3 className="font-label-lg text-label-lg text-error font-bold">Hesabı kalıcı olarak sil</h3>
+      <p className="font-body-sm text-body-sm text-ink">
+        Hesabın, kayıtlı rotaların, favori mekanların ve ziyaret geçmişin silinir. Paylaştığın rota linkleri de
+        çalışmaz. <strong>Bu işlem geri alınamaz.</strong>
+      </p>
+      <label htmlFor="delete-password" className="font-label-md text-label-md text-ink font-semibold">
+        Onaylamak için şifreni gir
+      </label>
+      <input
+        id="delete-password"
+        type="password"
+        autoComplete="current-password"
+        required
+        maxLength={128}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        className={inputClass}
+      />
+      {error && (
+        <p className="font-body-sm text-body-sm text-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="flex gap-space-sm">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={submitting}
+          className="h-12 px-5 rounded-xl bg-surface-container-high text-ink font-label-md text-label-md disabled:opacity-50"
+        >
+          Vazgeç
+        </button>
+        <button
+          type="submit"
+          disabled={submitting || password.length === 0}
+          className="flex-1 h-12 rounded-xl bg-error text-on-primary font-label-md text-label-md disabled:opacity-50"
+        >
+          {submitting ? 'Siliniyor...' : 'Hesabımı sil'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+function LoggedInPanel({
+  session,
+  onOpenSaved,
+  onAccountDeleted,
+}: {
+  session: Session
+  onOpenSaved: (id: string) => void
+  onAccountDeleted: () => void
+}) {
+  const [deletingAccount, setDeletingAccount] = useState(false)
   const username = session.user.username
   const [newUsername, setNewUsername] = useState(username)
   const [usernameError, setUsernameError] = useState<string | null>(null)
@@ -430,6 +507,19 @@ function LoggedInPanel({ session, onOpenSaved }: { session: Session; onOpenSaved
         <Icon name="logout" className="text-[18px]" />
         Çıkış yap
       </button>
+
+      {deletingAccount ? (
+        <DeleteAccountForm onCancel={() => setDeletingAccount(false)} onDone={onAccountDeleted} />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setDeletingAccount(true)}
+          className="h-10 font-label-md text-label-md text-error flex items-center justify-center gap-1.5"
+        >
+          <Icon name="delete_forever" className="text-[18px]" />
+          Hesabımı sil
+        </button>
+      )}
     </div>
   )
 }
@@ -470,7 +560,16 @@ export function AccountScreen({ session, onOpenSaved, resetToken, onResetDone }:
     )
   }
 
-  if (session) return <LoggedInPanel session={session} onOpenSaved={onOpenSaved} />
+  if (session) {
+    return (
+      <LoggedInPanel
+        session={session}
+        onOpenSaved={onOpenSaved}
+        // Hesap silinince oturum kapanır ve bu bileşen giriş formuna döner; kullanıcı ne olduğunu görsün.
+        onAccountDeleted={() => setNotice('Hesabın ve tüm verilerin kalıcı olarak silindi.')}
+      />
+    )
+  }
 
   const switchMode = (next: Mode) => {
     setMode(next)

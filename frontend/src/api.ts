@@ -5,10 +5,14 @@ export class ApiError extends Error {
   // Backend'in sunucu tarafı misafir kotası (X-Guest-Limit-Reached header'ı) mı
   // tetiklendi, yoksa genel bir hata/rate limit mi — App.tsx bu ikisini ayırt eder.
   guestLimit: boolean
-  constructor(status: number, message: string, guestLimit = false) {
+  // Giriş yapmış kullanıcının günlük kotası doldu (X-User-Limit-Reached). guestLimit'ten ayrı:
+  // o "giriş yap" ekranına yönlendirir, bu ise zaten giriş yapmış birine anlamsız olurdu.
+  userLimit: boolean
+  constructor(status: number, message: string, guestLimit = false, userLimit = false) {
     super(message)
     this.status = status
     this.guestLimit = guestLimit
+    this.userLimit = userLimit
   }
 }
 
@@ -41,7 +45,12 @@ export async function createPlan(
     } catch {
       /* gövde JSON değilse varsayılan mesaj */
     }
-    throw new ApiError(response.status, detail, response.headers.get('X-Guest-Limit-Reached') === '1')
+    throw new ApiError(
+      response.status,
+      detail,
+      response.headers.get('X-Guest-Limit-Reached') === '1',
+      response.headers.get('X-User-Limit-Reached') === '1',
+    )
   }
   return response.json()
 }
@@ -149,7 +158,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       /* gövde JSON değilse varsayılan mesaj */
     }
     if (response.status === 401 && token) unauthorizedHandler?.()
-    throw new ApiError(response.status, detail, response.headers.get('X-Guest-Limit-Reached') === '1')
+    throw new ApiError(
+      response.status,
+      detail,
+      response.headers.get('X-Guest-Limit-Reached') === '1',
+      response.headers.get('X-User-Limit-Reached') === '1',
+    )
   }
   if (response.status === 204) return undefined as T
   return response.json()
