@@ -1,11 +1,18 @@
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password, verify_password
-from app.db.models import User
+from app.db.models import (
+    DailyUsage,
+    FavoritePlace,
+    RefreshToken,
+    SavedPlan,
+    User,
+    VisitedPlace,
+)
 
 
 class AuthServiceError(Exception):
@@ -97,4 +104,26 @@ async def change_password(
     if not await verify_password(user.password_hash, current_password):
         raise InvalidCredentialsError
     user.password_hash = await hash_password(new_password)
+    await session.commit()
+
+
+async def delete_account(session: AsyncSession, user_id: uuid.UUID, password: str) -> None:
+    """Hesabı ve ona bağlı TÜM veriyi kalıcı siler (KVKK: silme hakkı). Şifre doğrulanır:
+    çalınmış bir erişim token'ı tek başına hesabı yok edemesin.
+
+    Bağlı tablolar veritabanında da `ON DELETE CASCADE` ile korunuyor, ama burada
+    açıkça silinir: davranış veritabanı ayarına bağlı kalmasın ve tek işlemde
+    (hepsi ya da hiçbiri) olsun. Soft delete yok; e-posta/kullanıcı adı da tutulmaz."""
+    user = await get_user(session, user_id)
+    if not await verify_password(user.password_hash, password):
+        raise InvalidCredentialsError
+    for table in (RefreshToken, SavedPlan, FavoritePlace, VisitedPlace, DailyUsage):
+        await session.execute(
+            delete(table)
+            .where(table.user_id == user_id)
+            .execution_options(synchronize_session=False)
+        )
+    await session.execute(
+        delete(User).where(User.id == user_id).execution_options(synchronize_session=False)
+    )
     await session.commit()

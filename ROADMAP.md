@@ -238,10 +238,15 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
 - [ ] **Rate limit — bellek içi sayaçlar**: slowapi ve `guest_limit.py` sayaçları
   bellekte; yeniden başlatmada sıfırlanır, çoklu worker'da limit worker sayısı
   kadar gevşer. Tek worker ile başla; büyürse Redis.
-- [ ] **Rate limit — giriş yapanlar için günlük üst sınır**: giriş yapan
-  kullanıcı `/plan`'da yalnızca dakikada 10 ile sınırlı, günlük sınır yok;
-  hesap açmak ücretsiz olduğundan maliyet riski var. Kullanıcı bazlı günlük
-  sınır düşünülebilir.
+- [x] **Rate limit — giriş yapanlar için günlük üst sınır**: hesap başına günlük
+  kota, veritabanında (`daily_usage`, migration 0004): `/plan` 30, `/route/legs`
+  300 (`USER_DAILY_PLAN_LIMIT`/`USER_DAILY_LEGS_LIMIT`). Artırma tek koşullu
+  `UPDATE` ile atomik; gün Türkiye saatine göre; yeniden başlatmada sıfırlanmaz,
+  çoklu worker'da paylaşılır. Gerçek Postgres'te 25 eşzamanlı oturumla denendi
+  (tam 5 izin / 20 red / 0 hata, limit 5). Açık: limit değerleri tahmini, gerçek
+  kullanımla ayarlanmalı; kota dolunca frontend yalnızca genel hata metnini
+  gösteriyor (kalan hak / sıfırlanma saati gösterimi yok); misafir sayacı hâlâ
+  bellek içi (aşağıdaki "bellek içi sayaçlar" maddesi).
 - [x] **Rate limit — giriş/kayıt**: auth artık backend'de; `/auth/register`
   `5/dakika`, `/auth/login` `10/dakika`, `/auth/refresh` `30/dakika`,
   `/me/password` `5/dakika` (IP bazlı). Açık kalan: hesap bazlı kilitleme
@@ -357,10 +362,10 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   kopyası güvenli bir yerde (şifre yöneticisi/secret yöneticisi) tutulmalı.
 - [ ] **Deploy**: `Dockerfile` ve `docker-compose.yml` var (yerelde `db` +
   `api`); henüz yok: bir barındırma seçimi, frontend `vite build` çıktısının
-  statik barındırılması ve `/api` altında API ile aynı adreste sunulması, açılışta
-  `alembic upgrade head` çalıştıran bir adım (Dockerfile migration dosyalarını
-  taşıyor ama otomatik çalıştırmıyor), ortam başına (`dev`/`prod`) ayrı veritabanı
-  ve API anahtarları. `api` imajı derlenip denendi: konteynerde `alembic upgrade head`, `/health` ve kayıt (DB'ye yazma) çalıştı.
+  statik barındırılması ve `/api` altında API ile aynı adreste sunulması, ortam
+  başına (`dev`/`prod`) ayrı veritabanı ve API anahtarları. Migration'lar `api`
+  konteyneri açılırken otomatik uygulanır (`docker-entrypoint.sh`, tek kopya
+  varsayımı; çok kopyada `RUN_MIGRATIONS=false`). `api` imajı derlenip denendi: konteynerde `alembic upgrade head`, `/health` ve kayıt (DB'ye yazma) çalıştı.
 - [x] **CI**: `.github/workflows/ci.yml` — backend (Python 3.11 ve 3.12: `ruff`,
   `pytest`), migrations (gerçek Postgres servisinde `alembic upgrade head`,
   `alembic check`, `downgrade base` + yeniden `upgrade`), frontend (`npm ci`,
@@ -459,11 +464,13 @@ yazılmalı; yurt dışına aktarım şartları hukuken değerlendirilmeli.
   rıza gerektirip gerektirmediği hukuki olarak netleştirilsin. Tarayıcı konum
   izni isteminden önce kısa bir açıklama gösterilsin.
 - [ ] **Silme hakkı**: hesap silme akışı (`users`, `saved_plans`,
-  `favorite_places`, `visited_places`, `refresh_tokens`; hepsi `on delete
-  cascade` ile `users`'a bağlı, yani kullanıcı silinince satırlar gider; ama
-  kullanıcının bunu kendi başına başlatacağı bir `DELETE /me` endpoint'i ve
-  ekranı henüz yok). Ziyaret geçmişini temizleme **yapıldı**: `DELETE /visits`
-  (tümü) ve `DELETE /visits/{place_id}`.
+  `favorite_places`, `visited_places`, `refresh_tokens`). **Backend yapıldı:**
+  `DELETE /me` (şifre doğrulamalı, tek işlemde hepsini kalıcı siler — soft
+  delete yok, e-posta/kullanıcı adı da tutulmaz; silinen hesabın erişim
+  token'ı anında 401 verir). **Açık:** Hesabım'da "Hesabı sil" düğmesi/onay
+  ekranı (frontend) ve yedeklerde/log'larda kalan verinin saklama süresi.
+  Ziyaret geçmişini temizleme **yapıldı**: `DELETE /visits` (tümü) ve
+  `DELETE /visits/{place_id}`.
 - [ ] **Erişim / taşınabilirlik**: kullanıcının kendi verisini görebilmesi ve
   dışa aktarabilmesi (Hesabım'dan JSON indir gibi).
 - [ ] **Paylaşılan planlar**: toptan listelenebilme sorunu düzeltildi (bkz.
@@ -523,16 +530,17 @@ Eski Supabase kullanıcıları taşınmadı (sıfırdan başlandı).
 **Açık:**
 - [ ] **Şifre sıfırlama ("şifremi unuttum")**: SMTP servisi seçimi gerekir; şu an
   şifresini unutan kullanıcı hesabına dönemez. Frontend'den bağlantı kaldırıldı.
-- [ ] **Hesap silme (`DELETE /me`) ve veri dışa aktarma**: KVKK maddeleriyle birlikte.
+- [ ] **Hesap silme (frontend) ve veri dışa aktarma**: `DELETE /me` backend'i yapıldı; arayüz ve dışa aktarma (`GET /me/export`) yok.
 - [ ] **E-posta doğrulama**: yok; kayıt olan herkes e-postası doğrulanmadan
   oturum açıyor. SMTP ile birlikte değerlendirilmeli.
 - [ ] **Hesap bazlı brute-force koruması**: yalnızca IP bazlı limit var.
 - [ ] **Tüm cihazlardan çıkış** düğmesi (backend `revoke_all_for_user` hazır).
 - [ ] **Frontend'in oturum mantığı tarayıcıda otomatik test edilmiyor**
   (`auth.ts` zamanlayıcı/sekme senkronu elle denenmeli).
-- [ ] **Migration'ın otomatik çalışması**: `api` konteyneri açılışta
-  `alembic upgrade head` çalıştırmıyor; yeni ortamda elle çalıştırılmalı
-  (`docker compose run --rm api alembic upgrade head`).
+- [x] **Migration'ın otomatik çalışması**: `docker-entrypoint.sh` açılışta
+  `alembic upgrade head` uygular, başarısızsa konteyner hatayla çıkar. Boş
+  veritabanı, ikinci açılış, bozuk bağlantı ve `RUN_MIGRATIONS=false` denendi.
+  Açık: migration'dan önce yedek alma ve geri alma (downgrade) prosedürü yok.
 - [ ] **Eski Supabase verisi**: gerçek kullanıcı varsa taşıma yapılmadı.
 
 ## Öncelik dışı / fikir aşamasında

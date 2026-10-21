@@ -104,6 +104,8 @@ cp .env.example .env
 | `DATABASE_URL` | evet\* | PostgreSQL bağlantısı, ör. `postgresql+asyncpg://rota:<şifre>@localhost:5433/rota`. Docker'da `api` servisi için compose bunu kendisi kurar. Kullanıcı verisi (hesap, planlar, favoriler) için gerekli; yoksa bu endpoint'ler çalışmaz |
 | `POSTGRES_PASSWORD` | evet\* | `docker-compose.yml`'deki Postgres için (`POSTGRES_USER`/`POSTGRES_DB` opsiyonel, varsayılan `rota`) |
 | `MAX_SAVED_PLANS_PER_USER`, `MAX_FAVORITES_PER_USER`, `MAX_VISITED_PLACES_PER_USER` | hayır | Varsayılan: `100`, `200`, `500`. Kullanıcı başına depolama üst sınırları |
+| `USER_DAILY_PLAN_LIMIT` | hayır | Varsayılan: `30`. Giriş yapmış bir kullanıcının günlük `/plan` kotası (hesap açmak ücretsiz olduğundan ücretli Google/Groq çağrılarına hesap başına da üst sınır). Gün Türkiye saatine (UTC+3) göre; sayaç veritabanında tutulur |
+| `USER_DAILY_LEGS_LIMIT` | hayır | Varsayılan: `300`. Giriş yapmış bir kullanıcının günlük `/route/legs` kotası (`/plan`'dan ayrı sayaç) |
 | `CORS_ORIGINS` | hayır | Varsayılan: `http://localhost:5173`. Virgülle ayrılmış izinli origin listesi; prod'da frontend'in gerçek adresiyle değiştirilmeli |
 
 `PLACES_API_KEY`, `GEOCODING_API_KEY`, `ROUTES_API_KEY`, `GROQ_API_KEY` ve `JWT_SECRET` olmadan uygulama açılışta hata verir (bilinçli tercih, bkz. `app/core/config.py`). \* `DATABASE_URL`/`POSTGRES_PASSWORD` açılışta zorunlu değil, ama hesap/plan/favori/ziyaret endpoint'leri onsuz çalışmaz.
@@ -118,7 +120,10 @@ alembic upgrade head           # tabloları oluşturur / günceller
 Şema `migrations/` altındaki Alembic migration'larıdır (kaynak: `app/db/models.py`).
 Model değiştirince `alembic revision --autogenerate -m "açıklama"` ile yeni migration
 üret, içine bak, sonra `alembic upgrade head`. Backend'i de konteynerde çalıştırmak için
-`docker compose up --build` (yeni bir ortamda önce `docker compose run --rm api alembic upgrade head`).
+`docker compose up --build`: `api` konteyneri açılışta `alembic upgrade head`'i kendisi
+çalıştırır (`docker-entrypoint.sh`); migration başarısız olursa konteyner hatayla çıkar.
+Birden çok `api` kopyası çalıştıracaksan migration'ı ayrı bir adım olarak çalıştırıp
+kopyalarda `RUN_MIGRATIONS=false` ver (iki kopya aynı anda migration çalıştırmamalı).
 Testler bellekte SQLite kullanır, Postgres gerekmez.
 
 ## Çalıştırma
@@ -166,7 +171,7 @@ pytest
 | `POST` | `/route/legs` | Verilen durak listesi (sıra + koordinat) için ardışık ayakları yeniden hesaplar — durak silindiğinde/sırası değiştiğinde kullanılır |
 | `POST` | `/auth/register`, `/auth/login` | Hesap açar / giriş yapar; erişim token'ı döner, refresh token `httpOnly` çereze yazılır |
 | `POST` | `/auth/refresh`, `/auth/logout` | Çerezdeki refresh token'la yeni erişim token'ı alır (token döner) / oturumu kapatır ve token'ı iptal eder |
-| `GET`, `PATCH` | `/me` | Profil / kullanıcı adını değiştir (giriş gerekir) |
+| `GET`, `PATCH`, `DELETE` | `/me` | Profil / kullanıcı adını değiştir / hesabı ve tüm veriyi kalıcı sil (giriş gerekir; silmede gövdede `{"password": ...}` istenir) |
 | `POST` | `/me/password` | Mevcut şifreyi doğrulayıp yenisini belirler; diğer cihazlardaki oturumlar kapanır |
 | `POST`, `GET`, `DELETE` | `/plans`, `/plans/{id}` | Planı kaydet / kayıtlı planları listele / sil (giriş gerekir, yalnızca kendi planların) |
 | `GET` | `/shared/{id}` | Paylaşım linkiyle planı aç (girişsiz; sahibin kimliği dönmez, yalnızca `is_owner`) |

@@ -212,6 +212,13 @@ fans out to several paid Google calls plus a Groq call per request:
   invalid token just means "treat as guest". `require_user_id` (same file)
   wraps it for login-required routes and raises `401`; use the `UserId` /
   `Session` aliases in [app/api/deps.py](app/api/deps.py) in route signatures.
+  `UserId` also checks the account still exists (one PK lookup per request),
+  so a deleted account's still-unexpired access token stops working at once
+  instead of failing later on a foreign-key error. `DELETE /me` hard-deletes
+  the user and every dependent row in one transaction (explicit deletes, so it
+  doesn't depend on DB cascade settings; there is no soft delete — KVKK).
+  **When you add a table with a `user_id`, add it to
+  `services/users.py::delete_account`** or deletion will leave that data behind.
 - [app/core/guest_limit.py](app/core/guest_limit.py)'s
   `enforce_guest_plan_limit` is the server-side backstop for `/plan`'s free
   usage cap (the frontend's `guestLimit.ts` localStorage counter is
@@ -231,6 +238,18 @@ fans out to several paid Google calls plus a Groq call per request:
   here, the frontend's `fetchLegs` (`api.ts`) must be passed an
   `accessToken`, same as `createPlan` — `DetailScreen.tsx` passes
   `session?.access_token` into every `fetchLegs` call.
+  Logged-in users have their own daily caps, **per account and persisted in
+  the DB** (`app/core/user_limit.py` + `app/services/usage.py`, table
+  `daily_usage`, settings `user_daily_plan_limit` 30 / `user_daily_legs_limit`
+  300): account creation is free, so a login alone must not unlock unlimited
+  paid Google/Groq calls. The increment is a single conditional `UPDATE ... WHERE
+  counter < limit` (atomic — concurrent requests can't overshoot), the day is
+  Turkey time (fixed UTC+3), and the `429` carries `X-User-Limit-Reached`, not
+  `X-Guest-Limit-Reached` (the frontend maps the latter to the "log in" screen,
+  which makes no sense for someone already logged in). `/plan` and
+  `/route/legs` therefore depend on a DB session even for guests (it's lazy —
+  no connection is made unless a user id is present). Tests must not hit the
+  real database: `tests/conftest.py` defaults `DATABASE_URL` to in-memory SQLite.
 - [app/main.py](app/main.py)'s `create_app()` adds `CORSMiddleware`
   (origins from `cors_origins`) and only enables `/docs`, `/redoc`,
   `/openapi.json` when `settings.debug` is true — they're closed by default.

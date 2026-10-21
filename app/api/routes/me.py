@@ -1,15 +1,21 @@
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
-from app.api.cookies import set_refresh_cookie
+from app.api.cookies import clear_refresh_cookie, set_refresh_cookie
 from app.api.deps import Session, UserId
 from app.core.rate_limit import limiter
-from app.schemas.auth import ChangePasswordRequest, UpdateProfileRequest, UserOut
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    DeleteAccountRequest,
+    UpdateProfileRequest,
+    UserOut,
+)
 from app.services import refresh_tokens
 from app.services.users import (
     InvalidCredentialsError,
     UsernameTakenError,
     UserNotFoundError,
     change_password,
+    delete_account,
     get_user,
     update_username,
 )
@@ -71,4 +77,27 @@ async def change_my_password(
     await refresh_tokens.revoke_all_for_user(session, user_id)
     out = Response(status_code=status.HTTP_204_NO_CONTENT)
     set_refresh_cookie(out, await refresh_tokens.issue_token(session, user_id))
+    return out
+
+
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/minute")
+async def delete_me(
+    request: Request, payload: DeleteAccountRequest, user_id: UserId, session: Session
+) -> Response:
+    """Hesabı ve tüm verisini (planlar, favoriler, ziyaretler, oturumlar) kalıcı siler.
+    Şifre doğrulanır; geri alınamaz. Yanlış şifre 400 (401 değil: istemci 401'i "oturum
+    düştü" diye yorumlayıp çıkış yapar)."""
+    try:
+        await delete_account(session, user_id, payload.password)
+    except InvalidCredentialsError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Şifre hatalı"
+        ) from None
+    except UserNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Hesap bulunamadı"
+        ) from None
+    out = Response(status_code=status.HTTP_204_NO_CONTENT)
+    clear_refresh_cookie(out)
     return out
