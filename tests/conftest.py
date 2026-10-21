@@ -8,6 +8,11 @@ for _name in ("PLACES_API_KEY", "GEOCODING_API_KEY", "ROUTES_API_KEY", "GROQ_API
 
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-en-az-32-karakter-uzunlugunda")
 
+# Testler .env'deki gerçek veritabanına ASLA dokunmasın: ortam değişkeni .env'den önceliklidir.
+# (HTTP testleri `client` fixture'ında kendi bellek-içi SQLite'ını kullanır; bu yalnızca
+# guest akışlarının session bağımlılığı çözülürken engine kurabilmesi için.)
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
+
 # Testlerde cookie http://test üzerinden ve "/" yoluyla gider (prod: Secure, /api/auth).
 os.environ.setdefault("COOKIE_SECURE", "false")
 os.environ.setdefault("REFRESH_COOKIE_PATH", "/")
@@ -59,6 +64,7 @@ def fake_groq(monkeypatch):
 async def client():
     """Bellekte SQLite ile çalışan HTTP istemcisi; gerçek Postgres gerekmez."""
     import httpx
+    from sqlalchemy import event
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from sqlalchemy.pool import StaticPool
 
@@ -69,6 +75,12 @@ async def client():
     engine = create_async_engine(
         "sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
     )
+
+    # SQLite yabancı anahtarları varsayılan olarak UYGULAMAZ; Postgres uygular. Açık olmazsa
+    # "silinmiş hesaba kayıt eklenemez" gibi davranışlar testlerde yanlışlıkla geçerdi.
+    @event.listens_for(engine.sync_engine, "connect")
+    def _foreign_keys_ac(dbapi_connection, _record):
+        dbapi_connection.execute("PRAGMA foreign_keys=ON")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     factory = async_sessionmaker(engine, expire_on_commit=False)

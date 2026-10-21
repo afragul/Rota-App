@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, Request
 
+from app.api.deps import Session
 from app.core.auth import get_optional_user_id
 from app.core.guest_limit import enforce_guest_legs_limit
 from app.core.rate_limit import limiter
+from app.core.user_limit import enforce_user_legs_limit
 from app.schemas.plan import ApproachRequest, ApproachRoute, LegsRequest, LegsResponse, PlanStop
 from app.services.routes import get_approach_route, get_route_legs
 
@@ -28,10 +30,12 @@ async def approach(request: Request, payload: ApproachRequest) -> ApproachRoute:
 async def recompute_legs(
     request: Request,
     payload: LegsRequest,
+    session: Session,
     user_id: str | None = Depends(get_optional_user_id),
 ) -> LegsResponse:
     """Durak silindiğinde/sırası değiştiğinde ayakları (mesafe/süre/çizgi) yeniden hesaplar."""
     enforce_guest_legs_limit(request, user_id)
+    await enforce_user_legs_limit(session, user_id)
     ordered = sorted(payload.stops, key=lambda s: s.order)
     stops = [
         PlanStop(

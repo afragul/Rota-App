@@ -227,6 +227,18 @@ fans out to several paid Google calls plus a Groq call per request:
   here, the frontend's `fetchLegs` (`api.ts`) must be passed an
   `accessToken`, same as `createPlan` — `DetailScreen.tsx` passes
   `session?.access_token` into every `fetchLegs` call.
+  Logged-in users have their own daily caps, **per account and persisted in
+  the DB** (`app/core/user_limit.py` + `app/services/usage.py`, table
+  `daily_usage`, settings `user_daily_plan_limit` 30 / `user_daily_legs_limit`
+  300): account creation is free, so a login alone must not unlock unlimited
+  paid Google/Groq calls. The increment is a single conditional `UPDATE ... WHERE
+  counter < limit` (atomic — concurrent requests can't overshoot), the day is
+  Turkey time (fixed UTC+3), and the `429` carries `X-User-Limit-Reached`, not
+  `X-Guest-Limit-Reached` (the frontend maps the latter to the "log in" screen,
+  which makes no sense for someone already logged in). `/plan` and
+  `/route/legs` therefore depend on a DB session even for guests (it's lazy —
+  no connection is made unless a user id is present). Tests must not hit the
+  real database: `tests/conftest.py` defaults `DATABASE_URL` to in-memory SQLite.
 - [app/main.py](app/main.py)'s `create_app()` adds `CORSMiddleware`
   (origins from `cors_origins`) and only enables `/docs`, `/redoc`,
   `/openapi.json` when `settings.debug` is true — they're closed by default.

@@ -73,6 +73,12 @@ class Settings(BaseSettings):
     # Bir kullanıcının kaydedebileceği en fazla plan sayısı (depolama şişmesin).
     max_saved_plans_per_user: int = 100
 
+    # Giriş yapmış kullanıcıların günlük kotası (hesap açmak ücretsiz olduğundan,
+    # ücretli Google/Groq çağrılarını yapan uçlarda hesap başına da üst sınır var).
+    # Gün, Türkiye saatine göre (UTC+3) başlar/biter. Sayaç veritabanında tutulur.
+    user_daily_plan_limit: int = 30
+    user_daily_legs_limit: int = 300
+
     # Kullanıcı başına favori / ziyaret edilen farklı mekan sayısı üst sınırları.
     max_favorites_per_user: int = 200
     max_visited_places_per_user: int = 500

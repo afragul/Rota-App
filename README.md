@@ -104,6 +104,8 @@ cp .env.example .env
 | `DATABASE_URL` | evet\* | PostgreSQL bağlantısı, ör. `postgresql+asyncpg://rota:<şifre>@localhost:5433/rota`. Docker'da `api` servisi için compose bunu kendisi kurar. Kullanıcı verisi (hesap, planlar, favoriler) için gerekli; yoksa bu endpoint'ler çalışmaz |
 | `POSTGRES_PASSWORD` | evet\* | `docker-compose.yml`'deki Postgres için (`POSTGRES_USER`/`POSTGRES_DB` opsiyonel, varsayılan `rota`) |
 | `MAX_SAVED_PLANS_PER_USER`, `MAX_FAVORITES_PER_USER`, `MAX_VISITED_PLACES_PER_USER` | hayır | Varsayılan: `100`, `200`, `500`. Kullanıcı başına depolama üst sınırları |
+| `USER_DAILY_PLAN_LIMIT` | hayır | Varsayılan: `30`. Giriş yapmış bir kullanıcının günlük `/plan` kotası (hesap açmak ücretsiz olduğundan ücretli Google/Groq çağrılarına hesap başına da üst sınır). Gün Türkiye saatine (UTC+3) göre; sayaç veritabanında tutulur |
+| `USER_DAILY_LEGS_LIMIT` | hayır | Varsayılan: `300`. Giriş yapmış bir kullanıcının günlük `/route/legs` kotası (`/plan`'dan ayrı sayaç) |
 | `CORS_ORIGINS` | hayır | Varsayılan: `http://localhost:5173`. Virgülle ayrılmış izinli origin listesi; prod'da frontend'in gerçek adresiyle değiştirilmeli |
 
 `PLACES_API_KEY`, `GEOCODING_API_KEY`, `ROUTES_API_KEY`, `GROQ_API_KEY` ve `JWT_SECRET` olmadan uygulama açılışta hata verir (bilinçli tercih, bkz. `app/core/config.py`). \* `DATABASE_URL`/`POSTGRES_PASSWORD` açılışta zorunlu değil, ama hesap/plan/favori/ziyaret endpoint'leri onsuz çalışmaz.
