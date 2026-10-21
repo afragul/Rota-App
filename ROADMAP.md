@@ -450,11 +450,13 @@ yazılmalı; yurt dışına aktarım şartları hukuken değerlendirilmeli.
   rıza gerektirip gerektirmediği hukuki olarak netleştirilsin. Tarayıcı konum
   izni isteminden önce kısa bir açıklama gösterilsin.
 - [ ] **Silme hakkı**: hesap silme akışı (`users`, `saved_plans`,
-  `favorite_places`, `visited_places`, `refresh_tokens`; hepsi `on delete
-  cascade` ile `users`'a bağlı, yani kullanıcı silinince satırlar gider; ama
-  kullanıcının bunu kendi başına başlatacağı bir `DELETE /me` endpoint'i ve
-  ekranı henüz yok). Ziyaret geçmişini temizleme **yapıldı**: `DELETE /visits`
-  (tümü) ve `DELETE /visits/{place_id}`.
+  `favorite_places`, `visited_places`, `refresh_tokens`). **Backend yapıldı:**
+  `DELETE /me` (şifre doğrulamalı, tek işlemde hepsini kalıcı siler — soft
+  delete yok, e-posta/kullanıcı adı da tutulmaz; silinen hesabın erişim
+  token'ı anında 401 verir). **Açık:** Hesabım'da "Hesabı sil" düğmesi/onay
+  ekranı (frontend) ve yedeklerde/log'larda kalan verinin saklama süresi.
+  Ziyaret geçmişini temizleme **yapıldı**: `DELETE /visits` (tümü) ve
+  `DELETE /visits/{place_id}`.
 - [ ] **Erişim / taşınabilirlik**: kullanıcının kendi verisini görebilmesi ve
   dışa aktarabilmesi (Hesabım'dan JSON indir gibi).
 - [ ] **Paylaşılan planlar**: toptan listelenebilme sorunu düzeltildi (bkz.
@@ -514,7 +516,7 @@ Eski Supabase kullanıcıları taşınmadı (sıfırdan başlandı).
 **Açık:**
 - [ ] **Şifre sıfırlama ("şifremi unuttum")**: SMTP servisi seçimi gerekir; şu an
   şifresini unutan kullanıcı hesabına dönemez. Frontend'den bağlantı kaldırıldı.
-- [ ] **Hesap silme (`DELETE /me`) ve veri dışa aktarma**: KVKK maddeleriyle birlikte.
+- [ ] **Hesap silme (frontend) ve veri dışa aktarma**: `DELETE /me` backend'i yapıldı; arayüz ve dışa aktarma (`GET /me/export`) yok.
 - [ ] **E-posta doğrulama**: yok; kayıt olan herkes e-postası doğrulanmadan
   oturum açıyor. SMTP ile birlikte değerlendirilmeli.
 - [ ] **Hesap bazlı brute-force koruması**: yalnızca IP bazlı limit var.

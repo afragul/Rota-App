@@ -201,6 +201,13 @@ fans out to several paid Google calls plus a Groq call per request:
   invalid token just means "treat as guest". `require_user_id` (same file)
   wraps it for login-required routes and raises `401`; use the `UserId` /
   `Session` aliases in [app/api/deps.py](app/api/deps.py) in route signatures.
+  `UserId` also checks the account still exists (one PK lookup per request),
+  so a deleted account's still-unexpired access token stops working at once
+  instead of failing later on a foreign-key error. `DELETE /me` hard-deletes
+  the user and every dependent row in one transaction (explicit deletes, so it
+  doesn't depend on DB cascade settings; there is no soft delete — KVKK).
+  **When you add a table with a `user_id`, add it to
+  `services/users.py::delete_account`** or deletion will leave that data behind.
 - [app/core/guest_limit.py](app/core/guest_limit.py)'s
   `enforce_guest_plan_limit` is the server-side backstop for `/plan`'s free
   usage cap (the frontend's `guestLimit.ts` localStorage counter is
