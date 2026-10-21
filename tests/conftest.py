@@ -6,6 +6,8 @@ import os
 for _name in ("PLACES_API_KEY", "GEOCODING_API_KEY", "ROUTES_API_KEY", "GROQ_API_KEY"):
     os.environ.setdefault(_name, f"test-{_name.lower()}")
 
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret-en-az-32-karakter-uzunlugunda")
+
 # Testler, aynı app singleton'ını (TestClient) tekrar tekrar çağırabilir;
 # IP bazlı rate limiting testlerde kapalı olmalı, aksi halde test sayısı
 # arttıkça flaky 429'lar görülebilir (bkz. app/core/rate_limit.py).

@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,13 +50,14 @@ class Settings(BaseSettings):
     # olduğu için guest_daily_plan_limit'ten kasıtlı olarak daha yüksek.
     guest_daily_legs_limit: int = 20
 
-    # Supabase JWT'sini doğrulamak için: Supabase Dashboard → Project Settings
-    # → API → JWT Settings. İki türden biri olabilir, hangisi varsa o kopyalanır:
-    # eski/legacy "JWT Secret" (düz metin, HS256) ya da yeni "Signing Keys"
-    # özelliğinin PEM formatlı genel anahtarı ("-----BEGIN PUBLIC KEY-----" ile
-    # başlar, ES256/RS256) — app/core/auth.py bu önekten otomatik ayırt eder.
-    # Ayarlanmazsa her istek misafir sayılır; backend auth'tan habersiz kalır.
-    supabase_jwt_secret: SecretStr | None = None
+    # Kendi ürettiğimiz erişim token'larını (JWT, HS256) imzalamak için gizli anahtar.
+    # Varsayılanı yok: eksikse uygulama açılışta patlar. En az 32 karakter,
+    # rastgele olmalı (ör. `openssl rand -hex 32`); sızarsa herkes herhangi
+    # bir kullanıcı adına token üretebilir.
+    jwt_secret: SecretStr
+
+    # Erişim token'ının ömrü (dakika).
+    jwt_expire_minutes: int = 60
 
     # --- Veritabanı ---
     # PostgreSQL bağlantı adresi (asyncpg sürücüsü). Hesap/favori verisi
@@ -67,6 +68,13 @@ class Settings(BaseSettings):
     # gerçek adresiyle değiştirilir). Dev'de Vite proxy sunucu-sunucu
     # çalıştığı için bu ayar devreye girmez.
     cors_origins: str = "http://localhost:5173"
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def _jwt_secret_yeterince_uzun(cls, value: SecretStr) -> SecretStr:
+        if len(value.get_secret_value()) < 32:
+            raise ValueError("JWT_SECRET en az 32 karakter olmalı")
+        return value
 
 
 @lru_cache

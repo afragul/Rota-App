@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     Float,
@@ -17,6 +18,9 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
+
+# Postgres'te JSONB, testlerde (SQLite) düz JSON.
+JsonType = JSON().with_variant(JSONB(), "postgresql")
 
 
 class User(Base):
@@ -47,8 +51,8 @@ class SavedPlan(Base):
     theme: Mapped[str] = mapped_column(Text)
     title: Mapped[str] = mapped_column(Text)
     summary: Mapped[str] = mapped_column(Text)
-    stops: Mapped[list] = mapped_column(JSONB)
-    legs: Mapped[list] = mapped_column(JSONB)
+    stops: Mapped[list] = mapped_column(JsonType)
+    legs: Mapped[list] = mapped_column(JsonType)
     routes_available: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -65,7 +69,7 @@ class _PlaceMixin:
     longitude: Mapped[float] = mapped_column(Float)
     rating: Mapped[float | None] = mapped_column(Float, default=None)
     user_rating_count: Mapped[int | None] = mapped_column(Integer, default=None)
-    types: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    types: Mapped[list] = mapped_column(JsonType, default=list, server_default="[]")
 
 
 class FavoritePlace(_PlaceMixin, Base):
