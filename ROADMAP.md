@@ -360,7 +360,7 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   statik barındırılması ve `/api` altında API ile aynı adreste sunulması, açılışta
   `alembic upgrade head` çalıştıran bir adım (Dockerfile migration dosyalarını
   taşıyor ama otomatik çalıştırmıyor), ortam başına (`dev`/`prod`) ayrı veritabanı
-  ve API anahtarları. Not: Dockerfile'ın `api` imajı bu ortamda derlenip denenmedi.
+  ve API anahtarları. `api` imajı derlenip denendi: konteynerde `alembic upgrade head`, `/health` ve kayıt (DB'ye yazma) çalıştı.
 - [ ] **CI**: GitHub Actions ile `ruff check`, `pytest`, frontend `tsc -b` ve
   `oxlint` (şu an hiçbiri otomatik koşmuyor, `.github/` yok).
 - [ ] **Bağımlılık taraması (dependency scanning)**: bilinen güvenlik
@@ -521,8 +521,9 @@ Eski Supabase kullanıcıları taşınmadı (sıfırdan başlandı).
 - [ ] **Tüm cihazlardan çıkış** düğmesi (backend `revoke_all_for_user` hazır).
 - [ ] **Frontend'in oturum mantığı tarayıcıda otomatik test edilmiyor**
   (`auth.ts` zamanlayıcı/sekme senkronu elle denenmeli).
-- [ ] **`api` konteynerinin derlenmesi/çalıştırılması** doğrulanmadı;
-  `alembic upgrade head` otomatik çalışmıyor.
+- [ ] **Migration'ın otomatik çalışması**: `api` konteyneri açılışta
+  `alembic upgrade head` çalıştırmıyor; yeni ortamda elle çalıştırılmalı
+  (`docker compose run --rm api alembic upgrade head`).
 - [ ] **Eski Supabase verisi**: gerçek kullanıcı varsa taşıma yapılmadı.
 
 ## Öncelik dışı / fikir aşamasında
