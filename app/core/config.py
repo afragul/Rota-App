@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     # Ayarlanmazsa her istek misafir sayılır; backend auth'tan habersiz kalır.
     supabase_jwt_secret: SecretStr | None = None
 
+    # --- Veritabanı ---
+    # PostgreSQL bağlantı adresi (asyncpg sürücüsü). Hesap/favori verisi
+    # Supabase'ten buraya taşınırken kullanılacak; şimdilik opsiyonel.
+    database_url: SecretStr | None = None
+
     # Virgülle ayrılmış izinli CORS origin listesi (prod'da frontend'in
     # gerçek adresiyle değiştirilir). Dev'de Vite proxy sunucu-sunucu
     # çalıştığı için bu ayar devreye girmez.
