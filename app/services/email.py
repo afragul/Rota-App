@@ -4,11 +4,22 @@ import smtplib
 import ssl
 from email.message import EmailMessage
 
+import certifi
+
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 _TIMEOUT = 15
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """TLS bağlamı: kök sertifikalar certifi paketinden (httpx'in de kullandığı yer).
+    ssl.create_default_context()'in varsayılanı sisteme bağlı: python.org'dan kurulmuş
+    macOS Python'larında kök sertifika deposu YOKTUR (`Install Certificates.command`
+    çalıştırılmadıkça) ve her SMTP bağlantısı "unable to get local issuer certificate"
+    ile düşerdi, oysa aynı makinedeki httpx çağrıları sorunsuz çalışıyordu."""
+    return ssl.create_default_context(cafile=certifi.where())
 
 
 class EmailNotConfiguredError(Exception):
@@ -28,7 +39,7 @@ def _send_sync(to: str, subject: str, body: str) -> None:
     message["Subject"] = subject
     message.set_content(body)
 
-    context = ssl.create_default_context()
+    context = _ssl_context()
     if settings.smtp_security == "ssl":
         server: smtplib.SMTP = smtplib.SMTP_SSL(
             settings.smtp_host, settings.smtp_port, timeout=_TIMEOUT, context=context

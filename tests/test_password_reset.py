@@ -274,3 +274,16 @@ async def test_kimlik_bilgisi_yoksa_login_denenmez(sahte_smtp, monkeypatch):
 async def test_smtp_yapilandirilmamissa_gonderim_hata_verir():
     with pytest.raises(email_service.EmailNotConfiguredError):
         await email_service.send_email("a@b.com", "Konu", "Gövde")
+
+
+def test_tls_baglami_sertifika_ve_ad_dogrular_ve_certifi_kullanir():
+    import ssl
+
+    import certifi
+
+    context = email_service._ssl_context()
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
+    # Sistem deposuna bağımlı olmamalı: certifi paketindeki kökler yüklü.
+    assert len(context.get_ca_certs()) > 0
+    assert certifi.where().endswith("cacert.pem")
