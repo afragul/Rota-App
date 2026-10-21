@@ -1,4 +1,4 @@
-import type { Session } from '@supabase/supabase-js'
+import type { Session } from '../auth'
 import { useEffect, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { RouteMap } from '../components/RouteMap'
@@ -20,17 +20,20 @@ export function SharedPlanScreen({ planId, session, onClose, onCreateOwn }: Prop
   const [state, setState] = useState<State>({ status: 'loading' })
   const [deleting, setDeleting] = useState(false)
 
+  const token = session?.access_token
+
+  // Token değişince (giriş/çıkış) yeniden çekilir: `is_owner` isteği yapana göre değişir.
   useEffect(() => {
     setState({ status: 'loading' })
-    fetchSharedPlan(planId).then(({ data, error }) => {
+    fetchSharedPlan(planId, token).then(({ data, error }) => {
       if (error || !data) setState({ status: 'error' })
       else setState({ status: 'ready', plan: data })
     })
-  }, [planId])
+  }, [planId, token])
 
   const removeFavorite = async () => {
     setDeleting(true)
-    await deleteSavedPlan(planId)
+    if (session) await deleteSavedPlan(planId, session.access_token)
     onClose()
   }
 
@@ -66,7 +69,7 @@ export function SharedPlanScreen({ planId, session, onClose, onCreateOwn }: Prop
         <div className="flex items-center justify-between py-space-md">
           <span className="font-label-sm text-label-sm text-text-secondary uppercase tracking-wider">Paylaşılan Rota</span>
           <div className="flex items-center gap-1">
-            {session?.user.id === plan.user_id && (
+            {plan.is_owner && session && (
               <button
                 onClick={removeFavorite}
                 disabled={deleting}

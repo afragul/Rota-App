@@ -1,35 +1,28 @@
-import type { Session } from '@supabase/supabase-js'
+import type { Session } from '../auth'
 import { useEffect, useState } from 'react'
+import { ApiError } from '../api'
+import { changePassword, signIn, signOut, signUp, updateUsername } from '../auth'
 import { Icon } from '../components/Icon'
 import { listFavoritePlaces, removeFavoritePlace, type FavoritePlace } from '../favoritePlaces'
 import { mapsUrl } from '../meta'
-import { deleteSavedPlan, listSavedPlans, shareUrl, type SavedPlan } from '../savedPlans'
-import { supabase } from '../supabase'
+import { deleteSavedPlan, listSavedPlans, shareUrl, type SavedPlanSummary } from '../savedPlans'
 
-// Supabase Auth hata mesajları İngilizce geliyor; bilinenleri Türkçeye çevirir.
-function authErrorText(message: string): string {
-  const m = message.toLowerCase()
-  if (m.includes('invalid login credentials')) return 'E-posta veya şifre hatalı.'
-  if (m.includes('email not confirmed')) return 'E-posta adresin henüz onaylanmamış. Gelen kutunu kontrol et.'
-  if (m.includes('user already registered')) return 'Bu e-posta ile zaten bir hesap var.'
-  if (m.includes('password should be at least')) return 'Şifre en az 6 karakter olmalı.'
-  if (m.includes('same password')) return 'Yeni şifre eskisinden farklı olmalı.'
-  if (m.includes('rate limit') || m.includes('too many')) return 'Çok fazla deneme yapıldı, biraz sonra tekrar dene.'
-  if (m.includes('invalid email') || m.includes('unable to validate email')) return 'Geçerli bir e-posta adresi gir.'
-  if (m.includes('failed to fetch') || m.includes('network')) return 'Bağlantı hatası, internetini kontrol et.'
-  return 'Bir hata oluştu, tekrar dene.'
+// Backend hata mesajları zaten Türkçe (409/400 gibi); bağlantı ve limit hataları burada çevrilir.
+function authErrorText(err: unknown): string {
+  if (!(err instanceof ApiError)) return 'Bir hata oluştu, tekrar dene.'
+  if (err.status === 0) return 'Bağlantı hatası, internetini kontrol et.'
+  if (err.status === 429) return 'Çok fazla deneme yapıldı, biraz sonra tekrar dene.'
+  if (err.status === 422) return 'Bilgilerini kontrol et: geçerli bir e-posta gir, şifre en az 8 karakter olsun.'
+  return err.message
 }
 
 interface Props {
   session: Session | null
-  /** Kullanıcı şifre sıfırlama e-postasındaki linke tıklayıp geri döndüğünde true. */
-  recovery: boolean
-  onRecoveryDone: () => void
   onOpenSaved: (id: string) => void
 }
 
-type Mode = 'login' | 'register' | 'forgot'
-type PlanSummary = Pick<SavedPlan, 'id' | 'theme' | 'title' | 'summary' | 'created_at'>
+type Mode = 'login' | 'register'
+type PlanSummary = SavedPlanSummary
 
 // Kısıtlama yok, sadece emoji yasak (Unicode "resimsel" sembol aralığı).
 const hasEmoji = (s: string) => /\p{Extended_Pictographic}/u.test(s)
@@ -37,7 +30,8 @@ const invalidUsername = (s: string) => s.trim().length === 0 || hasEmoji(s)
 const inputClass =
   'w-full h-12 px-4 bg-surface-container-low text-ink font-body-md text-body-md rounded-xl placeholder:text-text-secondary/70 focus:outline-none focus:bg-surface'
 
-function NewPasswordForm({ onDone }: { onDone: () => void }) {
+function ChangePasswordForm({ onDone }: { onDone: () => void }) {
+  const [current, setCurrent] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -51,67 +45,72 @@ function NewPasswordForm({ onDone }: { onDone: () => void }) {
     }
     setSubmitting(true)
     setError(null)
-    const { error } = await supabase.auth.updateUser({ password })
-    setSubmitting(false)
-    if (error) setError(authErrorText(error.message))
-    else onDone()
+    try {
+      await changePassword(current, password)
+      onDone()
+    } catch (err) {
+      setError(authErrorText(err))
+    } finally {
+      setSubmitting(false)
+    }
   }
 
+  const field = (id: string, label: string, value: string, set: (v: string) => void, auto: string, min?: number) => (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="font-label-md text-label-md text-ink font-semibold">
+        {label}
+      </label>
+      <input
+        id={id}
+        type="password"
+        autoComplete={auto}
+        required
+        minLength={min}
+        maxLength={128}
+        value={value}
+        onChange={(e) => set(e.target.value)}
+        className={inputClass}
+      />
+    </div>
+  )
+
   return (
-    <form onSubmit={submit} className="flex flex-col gap-space-md pt-space-lg">
+    <form onSubmit={submit} className="flex flex-col gap-space-md p-space-md">
       <div className="flex flex-col gap-1.5 mb-2">
-        <h2 className="font-headline-xl-mobile text-headline-xl-mobile text-ink tracking-tight">Yeni şifre belirle</h2>
-        <p className="font-body-md text-body-md text-text-secondary">Hesabın için yeni bir şifre seç.</p>
+        <h2 className="font-headline-xl-mobile text-headline-xl-mobile text-ink tracking-tight">Şifre değiştir</h2>
+        <p className="font-body-md text-body-md text-text-secondary">Önce mevcut şifreni, sonra yenisini gir.</p>
       </div>
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="new-password" className="font-label-md text-label-md text-ink font-semibold">
-          Yeni şifre
-        </label>
-        <input
-          id="new-password"
-          type="password"
-          autoComplete="new-password"
-          required
-          minLength={6}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className={inputClass}
-        />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="new-password-confirm" className="font-label-md text-label-md text-ink font-semibold">
-          Yeni şifre (tekrar)
-        </label>
-        <input
-          id="new-password-confirm"
-          type="password"
-          autoComplete="new-password"
-          required
-          minLength={6}
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-          className={inputClass}
-        />
-      </div>
+      {field('current-password', 'Mevcut şifre', current, setCurrent, 'current-password')}
+      {field('new-password', 'Yeni şifre (en az 8 karakter)', password, setPassword, 'new-password', 8)}
+      {field('new-password-confirm', 'Yeni şifre (tekrar)', confirm, setConfirm, 'new-password', 8)}
       {error && (
         <div className="bg-error-container/60 rounded-xl p-space-sm" role="alert">
           <p className="font-body-sm text-body-sm text-on-error-container">{error}</p>
         </div>
       )}
-      <button
-        type="submit"
-        disabled={submitting}
-        className="h-12 rounded-xl bg-plan-a text-on-primary font-label-md text-label-md disabled:opacity-50"
-      >
-        {submitting ? 'Kaydediliyor...' : 'Şifreyi güncelle'}
-      </button>
+      <div className="flex gap-space-sm">
+        <button
+          type="button"
+          onClick={onDone}
+          className="h-12 px-5 rounded-xl bg-surface-container-high text-ink font-label-md text-label-md"
+        >
+          Vazgeç
+        </button>
+        <button
+          type="submit"
+          disabled={submitting}
+          className="flex-1 h-12 rounded-xl bg-plan-a text-on-primary font-label-md text-label-md disabled:opacity-50"
+        >
+          {submitting ? 'Kaydediliyor...' : 'Şifreyi güncelle'}
+        </button>
+      </div>
     </form>
   )
 }
 
 function LoggedInPanel({ session, onOpenSaved }: { session: Session; onOpenSaved: (id: string) => void }) {
-  const [username, setUsername] = useState<string | null | 'loading'>('loading')
-  const [newUsername, setNewUsername] = useState('')
+  const username = session.user.username
+  const [newUsername, setNewUsername] = useState(username)
   const [usernameError, setUsernameError] = useState<string | null>(null)
   const [savingUsername, setSavingUsername] = useState(false)
   const [editingUsername, setEditingUsername] = useState(false)
@@ -121,25 +120,14 @@ function LoggedInPanel({ session, onOpenSaved }: { session: Session; onOpenSaved
   const [favoritePlaces, setFavoritePlaces] = useState<FavoritePlace[] | 'loading'>('loading')
 
   const loadPlans = () => {
-    listSavedPlans(session.user.id).then(({ data }) => setPlans(data ?? []))
+    listSavedPlans(session.access_token).then(({ data }) => setPlans(data ?? []))
   }
 
   const loadFavoritePlaces = () => {
-    listFavoritePlaces(session.user.id).then(({ data }) => setFavoritePlaces(data ?? []))
+    listFavoritePlaces(session.access_token).then(({ data }) => setFavoritePlaces(data ?? []))
   }
 
   useEffect(() => {
-    supabase
-      .from('profiles')
-      .select('username')
-      .eq('id', session.user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        const current = data?.username ?? null
-        setUsername(current)
-        setNewUsername(current ?? '')
-        if (current === null) setEditingUsername(true)
-      })
     loadPlans()
     loadFavoritePlaces()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -154,12 +142,13 @@ function LoggedInPanel({ session, onOpenSaved }: { session: Session; onOpenSaved
     }
     setSavingUsername(true)
     setUsernameError(null)
-    const { error } = await supabase.from('profiles').upsert({ id: session.user.id, username: trimmed })
-    setSavingUsername(false)
-    if (error) setUsernameError(error.message.includes('duplicate') ? 'Bu kullanıcı adı alınmış' : error.message)
-    else {
-      setUsername(trimmed)
+    try {
+      await updateUsername(trimmed)
       setEditingUsername(false)
+    } catch (err) {
+      setUsernameError(authErrorText(err))
+    } finally {
+      setSavingUsername(false)
     }
   }
 
@@ -174,12 +163,12 @@ function LoggedInPanel({ session, onOpenSaved }: { session: Session; onOpenSaved
   }
 
   const removePlan = async (id: string) => {
-    await deleteSavedPlan(id)
+    await deleteSavedPlan(id, session.access_token)
     loadPlans()
   }
 
   const removeFavoritePlaceRow = async (placeId: string) => {
-    await removeFavoritePlace(session.user.id, placeId)
+    await removeFavoritePlace(placeId, session.access_token)
     loadFavoritePlaces()
   }
 
@@ -191,11 +180,11 @@ function LoggedInPanel({ session, onOpenSaved }: { session: Session; onOpenSaved
         </div>
         <div className="flex flex-col min-w-0 flex-1">
           <span className="font-label-lg text-label-lg text-ink font-semibold truncate">
-            {username === 'loading' ? '...' : (username ?? session.user.email)}
+            {username}
           </span>
           <span className="font-body-sm text-body-sm text-text-secondary truncate">{session.user.email}</span>
         </div>
-        {username !== 'loading' && !editingUsername && (
+        {!editingUsername && (
           <button
             type="button"
             onClick={() => setEditingUsername(true)}
@@ -210,30 +199,29 @@ function LoggedInPanel({ session, onOpenSaved }: { session: Session; onOpenSaved
       {editingUsername && (
         <form onSubmit={saveUsername} className="bg-surface rounded-xl p-space-md shadow-sm flex flex-col gap-space-sm">
           <label htmlFor="backfill-username" className="font-label-md text-label-md text-ink font-semibold">
-            {username === null ? 'Kullanıcı adı belirle' : 'Kullanıcı adını değiştir'}
+            Kullanıcı adını değiştir
           </label>
           <input
             id="backfill-username"
             value={newUsername}
+            maxLength={50}
             onChange={(e) => setNewUsername(e.target.value)}
             placeholder="örn. beyza_34"
             className={inputClass}
           />
           {usernameError && <p className="font-body-sm text-body-sm text-error">{usernameError}</p>}
           <div className="flex gap-space-sm">
-            {username !== null && (
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingUsername(false)
-                  setNewUsername(username)
-                  setUsernameError(null)
-                }}
-                className="h-11 px-5 rounded-xl bg-surface-container-high text-ink font-label-md text-label-md"
-              >
-                Vazgeç
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => {
+                setEditingUsername(false)
+                setNewUsername(username)
+                setUsernameError(null)
+              }}
+              className="h-11 px-5 rounded-xl bg-surface-container-high text-ink font-label-md text-label-md"
+            >
+              Vazgeç
+            </button>
             <button
               type="submit"
               disabled={savingUsername}
@@ -247,7 +235,7 @@ function LoggedInPanel({ session, onOpenSaved }: { session: Session; onOpenSaved
 
       {changingPassword ? (
         <div className="bg-surface rounded-xl shadow-sm">
-          <NewPasswordForm onDone={() => setChangingPassword(false)} />
+          <ChangePasswordForm onDone={() => setChangingPassword(false)} />
         </div>
       ) : (
         <button
@@ -351,7 +339,7 @@ function LoggedInPanel({ session, onOpenSaved }: { session: Session; onOpenSaved
       </div>
 
       <button
-        onClick={() => supabase.auth.signOut()}
+        onClick={signOut}
         className="h-12 rounded-xl bg-surface-container-high text-ink font-label-md text-label-md flex items-center justify-center gap-1.5"
       >
         <Icon name="logout" className="text-[18px]" />
@@ -363,75 +351,53 @@ function LoggedInPanel({ session, onOpenSaved }: { session: Session; onOpenSaved
 
 // Giriş opsiyonel: uygulama misafir olarak da kullanılabilir, bu ekran sadece
 // hesap oluşturup giriş yapmak isteyenler için (bkz. Shell'deki hesap ikonu).
-export function AccountScreen({ session, recovery, onRecoveryDone, onOpenSaved }: Props) {
+export function AccountScreen({ session, onOpenSaved }: Props) {
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-
-  // Şifre sıfırlama linkiyle gelindiyse, oturum olsa da önce yeni şifre sorulur.
-  if (recovery) return <NewPasswordForm onDone={onRecoveryDone} />
 
   if (session) return <LoggedInPanel session={session} onOpenSaved={onOpenSaved} />
 
   const switchMode = (next: Mode) => {
     setMode(next)
     setError(null)
-    setNotice(null)
   }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
     setError(null)
-    setNotice(null)
 
-    if (mode === 'forgot') {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin })
-      setSubmitting(false)
-      if (error) setError(authErrorText(error.message))
-      else setNotice('Şifre sıfırlama bağlantısı e-postana gönderildi.')
-      return
-    }
-
-    if (mode === 'register') {
-      const normalized = username.trim()
-      if (invalidUsername(normalized)) {
-        setSubmitting(false)
-        setError('Kullanıcı adı boş olamaz ve emoji içeremez')
-        return
+    try {
+      if (mode === 'register') {
+        const normalized = username.trim()
+        if (invalidUsername(normalized)) {
+          setError('Kullanıcı adı boş olamaz ve emoji içeremez')
+          return
+        }
+        // Kayıt başarılıysa backend doğrudan oturum açar; ekran LoggedInPanel'e geçer.
+        await signUp(email, normalized, password)
+      } else {
+        await signIn(email, password)
       }
-      const { data: existing } = await supabase.from('profiles').select('id').eq('username', normalized).maybeSingle()
-      if (existing) {
-        setSubmitting(false)
-        setError('Bu kullanıcı adı alınmış')
-        return
-      }
-      const { error } = await supabase.auth.signUp({ email, password, options: { data: { username: normalized } } })
+    } catch (err) {
+      setError(authErrorText(err))
+    } finally {
       setSubmitting(false)
-      if (error) setError(authErrorText(error.message))
-      else setNotice('Kayıt başarılı. E-postana gelen bağlantıyla hesabını onayladıktan sonra giriş yapabilirsin.')
-      return
     }
-
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    setSubmitting(false)
-    if (error) setError(authErrorText(error.message))
   }
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-space-md pt-space-lg">
       <div className="flex flex-col gap-1.5 mb-2">
         <h2 className="font-headline-xl-mobile text-headline-xl-mobile text-ink tracking-tight">
-          {mode === 'login' ? 'Giriş Yap' : mode === 'register' ? 'Hesap Oluştur' : 'Şifremi Unuttum'}
+          {mode === 'login' ? 'Giriş Yap' : 'Hesap Oluştur'}
         </h2>
         <p className="font-body-md text-body-md text-text-secondary">
-          {mode === 'forgot'
-            ? 'E-posta adresini gir, sana şifre sıfırlama bağlantısı gönderelim.'
-            : 'Giriş yapmak zorunlu değil, uygulamayı misafir olarak da kullanabilirsin.'}
+          Giriş yapmak zorunlu değil, uygulamayı misafir olarak da kullanabilirsin.
         </p>
       </div>
 
@@ -445,6 +411,8 @@ export function AccountScreen({ session, recovery, onRecoveryDone, onOpenSaved }
             type="text"
             autoComplete="username"
             required
+            minLength={2}
+            maxLength={50}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="örn. beyza_34"
@@ -462,13 +430,14 @@ export function AccountScreen({ session, recovery, onRecoveryDone, onOpenSaved }
           type="email"
           autoComplete="email"
           required
+          maxLength={254}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className={inputClass}
         />
       </div>
 
-      {mode !== 'forgot' && (
+      {(
         <div className="flex flex-col gap-1.5">
           <label htmlFor="account-password" className="font-label-md text-label-md text-ink font-semibold">
             Şifre
@@ -478,24 +447,18 @@ export function AccountScreen({ session, recovery, onRecoveryDone, onOpenSaved }
             type="password"
             autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             required
-            minLength={6}
+            minLength={mode === 'register' ? 8 : 1}
+            maxLength={128}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className={inputClass}
           />
-          {mode === 'login' && (
-            <button type="button" onClick={() => switchMode('forgot')} className="self-end font-label-sm text-label-sm text-primary">
-              Şifremi unuttum
-            </button>
+          {mode === 'register' && (
+            <p className="font-body-sm text-body-sm text-text-secondary">En az 8 karakter.</p>
           )}
         </div>
       )}
 
-      {notice && (
-        <div className="bg-success/15 rounded-xl p-space-md" role="status">
-          <p className="font-body-md text-body-md text-ink">{notice}</p>
-        </div>
-      )}
       {error && (
         <div className="bg-error-container/60 rounded-xl p-space-sm" role="alert">
           <p className="font-body-sm text-body-sm text-on-error-container">{error}</p>
@@ -507,15 +470,15 @@ export function AccountScreen({ session, recovery, onRecoveryDone, onOpenSaved }
         disabled={submitting}
         className="h-12 rounded-xl bg-plan-a text-on-primary font-label-md text-label-md disabled:opacity-50"
       >
-        {submitting ? 'Gönderiliyor...' : mode === 'login' ? 'Giriş Yap' : mode === 'register' ? 'Kayıt Ol' : 'Bağlantı gönder'}
+        {submitting ? 'Gönderiliyor...' : mode === 'login' ? 'Giriş Yap' : 'Kayıt Ol'}
       </button>
 
       <button
         type="button"
-        onClick={() => switchMode(mode === 'register' ? 'login' : mode === 'forgot' ? 'login' : 'register')}
+        onClick={() => switchMode(mode === 'register' ? 'login' : 'register')}
         className="font-label-md text-label-md text-primary"
       >
-        {mode === 'login' ? 'Hesabın yok mu? Kayıt ol' : mode === 'register' ? 'Zaten hesabın var mı? Giriş yap' : 'Giriş ekranına dön'}
+        {mode === 'login' ? 'Hesabın yok mu? Kayıt ol' : 'Zaten hesabın var mı? Giriş yap'}
       </button>
     </form>
   )

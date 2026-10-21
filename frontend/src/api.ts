@@ -104,3 +104,65 @@ export async function fetchLegs(
   const data = await response.json()
   return data.legs
 }
+
+// Süresi dolmuş/geçersiz token'la 401 alınınca oturumu kapatmak için auth.ts kaydeder
+// (api.ts auth.ts'i import etmesin diye döngüyü bu kanca kırıyor).
+let unauthorizedHandler: (() => void) | null = null
+export function setUnauthorizedHandler(handler: () => void) {
+  unauthorizedHandler = handler
+}
+
+interface RequestOptions {
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'
+  body?: unknown
+  token?: string
+  signal?: AbortSignal
+}
+
+// Hesap/plan/favori/ziyaret endpoint'leri için ortak fetch sarmalayıcı: backend'in
+// (Türkçe) `detail` mesajını ApiError'a taşır, 204'te undefined döner.
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { method = 'GET', body, token, signal } = options
+  let response: Response
+  try {
+    response = await fetch(`/api${path}`, {
+      method,
+      headers: {
+        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal,
+    })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err
+    throw new ApiError(0, 'Sunucuya ulaşılamadı')
+  }
+
+  if (!response.ok) {
+    let detail = 'İşlem başarısız oldu'
+    try {
+      const data = await response.json()
+      if (typeof data.detail === 'string') detail = data.detail
+      else if (response.status === 422) detail = 'Girilen bilgiler geçersiz'
+    } catch {
+      /* gövde JSON değilse varsayılan mesaj */
+    }
+    if (response.status === 401 && token) unauthorizedHandler?.()
+    throw new ApiError(response.status, detail, response.headers.get('X-Guest-Limit-Reached') === '1')
+  }
+  if (response.status === 204) return undefined as T
+  return response.json()
+}
+
+// Veri modüllerinin (savedPlans/favoritePlaces/visitedPlaces) eski `{ data, error }`
+// dönüş biçimini korur; böylece çağıran ekranlar try/catch'e çevrilmek zorunda kalmaz.
+export type Result<T> = { data: T; error: null } | { data: null; error: ApiError }
+
+export async function settle<T>(promise: Promise<T>): Promise<Result<T>> {
+  try {
+    return { data: await promise, error: null }
+  } catch (err) {
+    return { data: null, error: err instanceof ApiError ? err : new ApiError(0, 'Beklenmeyen hata') }
+  }
+}

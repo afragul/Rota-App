@@ -1,4 +1,4 @@
-import type { Session } from '@supabase/supabase-js'
+import type { Session } from '../auth'
 import { useEffect, useState } from 'react'
 import { Icon } from '../components/Icon'
 import { hasLocation, locationLabel, type Preferences } from '../prefs'
@@ -24,7 +24,7 @@ export function LocationScreen({ prefs, onChange, onContinue, onPickFrequent, se
 
   useEffect(() => {
     if (!session) return setFrequent([])
-    listFrequentPlaces(session.user.id).then(({ data }) => setFrequent(data ?? []))
+    listFrequentPlaces(session.access_token).then(({ data }) => setFrequent(data ?? []))
   }, [session])
 
   return (
