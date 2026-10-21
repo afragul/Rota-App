@@ -37,7 +37,7 @@ Sistem bu tercihlere göre:
 - Serbest metin belirsiz/çelişkiliyse (ör. "bir şeyler yapalım") LLM doğrudan plan yerine bir netleştirme sorusu döndürür (`app/services/planner.py::check_ambiguity`); aynı `POST /plan`, istemci `previous_question`/`clarification_answer` alanlarıyla cevabı geri gönderince bir tur sonra plana devam edilir. Backend stateless kalır — sunucu tarafında konuşma geçmişi tutulmaz.
 - Plan kurulurken çekilen mekan havuzu (`DayPlan.place_pool`) tamamen yanıta dahil edilir — frontend'in durak değiştirme/ekleme özelliği bu havuzu yeniden kullanır, ek bir Google çağrısı yapmaz.
 - `PlanRequest.anchor_place` verilirse (ana sayfada "sık gidilen yer" seçilince) o mekan, LLM'in seçimine bakılmaksızın her alternatife durak olarak garanti edilir (`orchestrator.py::_ensure_anchor_stop`); anchor'ın koordinatları zaten bilindiği için geocoding'e gerek kalmaz.
-- Rate limiting (`slowapi`), opsiyonel Supabase JWT doğrulaması, sunucu taraflı misafir plan kotası (`/plan`) ve ayrı bir misafir kotası (`/route/legs`), CORS, Content-Security-Policy (frontend build'inde) ve girdi sınırları — bkz. `CLAUDE.md`'deki "Security" bölümü.
+- Rate limiting (`slowapi`), kendi kayıt/giriş sistemimiz (argon2 şifre, kısa ömürlü JWT + `httpOnly` refresh çerezi), kullanıcı verisi için PostgreSQL, sunucu taraflı misafir plan kotası (`/plan`) ve ayrı bir misafir kotası (`/route/legs`), CORS, Content-Security-Policy (frontend build'inde) ve girdi sınırları — bkz. `CLAUDE.md`'deki "Security" bölümü.
 
 ### Frontend
 
@@ -45,8 +45,8 @@ Sistem bu tercihlere göre:
 
 - Konum/tercih seçimi, sonuç ve plan detayı ekranları; açık/koyu tema anahtarı
 - Canlı navigasyon modu, plan detayında durakları sil/sırala/değiştir/taşı/ekle
-- **Supabase Auth** (tamamen frontend'de, backend'den bağımsız): giriş opsiyonel (misafir modu var), kayıt/giriş/şifremi unuttum, kullanıcı adı
-- Rota kaydetme/favorileme ve link ile paylaşım (Supabase `saved_plans` tablosu — bkz. "Frontend kurulumu")
+- **Hesap** (backend'in kendi auth'u, PostgreSQL): giriş opsiyonel (misafir modu var), kayıt/giriş, kullanıcı adı ve şifre değiştirme, sessiz oturum yenileme. Şifre sıfırlama ("şifremi unuttum") henüz yok
+- Rota kaydetme/favorileme ve link ile paylaşım (`saved_plans` tablosu, `/plans` ve `/shared/{id}`)
 - Mekan bazlı favorileme (`favorite_places` tablosu, rotadan bağımsız) — plan detayındaki her durakta kalp ikonu, Hesabım'da liste, "+ Durak ekle" sayfasında "Favorilerimden ekle" sekmesiyle herhangi bir rotaya eklenebilir
 - Sık gidilen yerler: "Ulaşıldı" işaretlemeleri `visited_places` tablosuna kalıcı ziyaret sayacı olarak işlenir; ana sayfada en sık gidilen 5 mekan tıklanabilir kart olarak çıkar, tıklanınca o mekan garanti rotaya girer (tercihler yine sorulur)
 - Production build'inde (`npm run build`) bir Content-Security-Policy meta tag'i — `npm run dev`'de yok (HMR'ı kırar), bkz. `frontend/vite.config.ts` ve `CLAUDE.md`'deki "Security" bölümü
@@ -96,10 +96,30 @@ cp .env.example .env
 | `RATE_LIMIT_ENABLED` | hayır | Varsayılan: `true`. IP bazlı rate limiting'i (`slowapi`) kapatmak için `false` (testlerde kapalı) |
 | `GUEST_DAILY_PLAN_LIMIT` | hayır | Varsayılan: `3`. Giriş yapmamış kullanıcıların günlük `/plan` kotası (sunucu tarafı; `frontend/src/guestLimit.ts`'teki `GUEST_PLAN_LIMIT` ile aynı tutulmalı) |
 | `GUEST_DAILY_LEGS_LIMIT` | hayır | Varsayılan: `20`. Giriş yapmamış kullanıcıların günlük `/route/legs` (durak sil/sırala/ekle) kotası — `/plan`'dan ayrı bir sayaç, daha sık tetiklenen bir aksiyon olduğu için daha yüksek |
-| `SUPABASE_JWT_SECRET` | hayır | Supabase Dashboard → Project Settings → API → JWT Settings — projende "JWT Secret" (legacy, HS256) varsa onu, yoksa "Signing Keys" altındaki aktif anahtarın PEM formatlı genel anahtarını ("-----BEGIN PUBLIC KEY-----" ile başlar, ES256/RS256) kopyala; hangisi olduğu otomatik anlaşılır. Ayarlanmazsa her istek misafir sayılır (giriş yapmış kullanıcılar da günlük kotaya tabi olur) |
+| `JWT_SECRET` | evet | Erişim token'larını imzalamak için gizli anahtar, en az 32 karakter (`openssl rand -hex 32`). Sızarsa herkes istediği kullanıcı adına token üretebilir; yayında ayrı bir değer kullan |
+| `JWT_EXPIRE_MINUTES` | hayır | Varsayılan: `15`. Erişim token'ının ömrü; oturumu refresh token sürdürür |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | hayır | Varsayılan: `30`. Refresh token (çerez) ömrü |
+| `COOKIE_SECURE` | hayır | Varsayılan: `true`. Refresh çerezi yalnızca HTTPS'te gider. Yerel `http` geliştirmede `false` yap; yayında dokunma |
+| `REFRESH_COOKIE_PATH` | hayır | Varsayılan: `/api/auth`. Tarayıcının gördüğü API adresiyle eşleşmeli; yanlışsa çerez gönderilmez ve oturum yenilenemez |
+| `DATABASE_URL` | evet\* | PostgreSQL bağlantısı, ör. `postgresql+asyncpg://rota:<şifre>@localhost:5433/rota`. Docker'da `api` servisi için compose bunu kendisi kurar. Kullanıcı verisi (hesap, planlar, favoriler) için gerekli; yoksa bu endpoint'ler çalışmaz |
+| `POSTGRES_PASSWORD` | evet\* | `docker-compose.yml`'deki Postgres için (`POSTGRES_USER`/`POSTGRES_DB` opsiyonel, varsayılan `rota`) |
+| `MAX_SAVED_PLANS_PER_USER`, `MAX_FAVORITES_PER_USER`, `MAX_VISITED_PLACES_PER_USER` | hayır | Varsayılan: `100`, `200`, `500`. Kullanıcı başına depolama üst sınırları |
 | `CORS_ORIGINS` | hayır | Varsayılan: `http://localhost:5173`. Virgülle ayrılmış izinli origin listesi; prod'da frontend'in gerçek adresiyle değiştirilmeli |
 
-`PLACES_API_KEY`, `GEOCODING_API_KEY`, `ROUTES_API_KEY` ve `GROQ_API_KEY` olmadan uygulama açılışta hata verir (bilinçli tercih, bkz. `app/core/config.py`).
+`PLACES_API_KEY`, `GEOCODING_API_KEY`, `ROUTES_API_KEY`, `GROQ_API_KEY` ve `JWT_SECRET` olmadan uygulama açılışta hata verir (bilinçli tercih, bkz. `app/core/config.py`). \* `DATABASE_URL`/`POSTGRES_PASSWORD` açılışta zorunlu değil, ama hesap/plan/favori/ziyaret endpoint'leri onsuz çalışmaz.
+
+### Veritabanı (PostgreSQL)
+
+```bash
+docker compose up -d db        # Postgres'i başlatır (yalnızca 127.0.0.1:5433'e açık)
+alembic upgrade head           # tabloları oluşturur / günceller
+```
+
+Şema `migrations/` altındaki Alembic migration'larıdır (kaynak: `app/db/models.py`).
+Model değiştirince `alembic revision --autogenerate -m "açıklama"` ile yeni migration
+üret, içine bak, sonra `alembic upgrade head`. Backend'i de konteynerde çalıştırmak için
+`docker compose up --build` (yeni bir ortamda önce `docker compose run --rm api alembic upgrade head`).
+Testler bellekte SQLite kullanır, Postgres gerekmez.
 
 ## Çalıştırma
 
@@ -122,8 +142,10 @@ uvicorn app.main:app --proxy-headers --forwarded-allow-ips='*'
 IP'sini görmesi için proxy'nin `X-Forwarded-For` header'ına güvenilmesini
 sağlar — reverse proxy'nin bunu doğru ayarladığından emin ol. Prod `.env`'de
 ayrıca `DEBUG=false` (varsayılan), `CORS_ORIGINS` (gerçek frontend adresi)
-ve giriş yapmış kullanıcıları ayırt etmek istiyorsan `SUPABASE_JWT_SECRET`
-ayarlanmalı.
+ve yayına özel bir `JWT_SECRET`, `DATABASE_URL`, güçlü bir `POSTGRES_PASSWORD`
+ayarlanmalı. Refresh çerezi `Secure` olduğu için yayın HTTPS olmalı; frontend ve API
+aynı adreste, API `/api` önekiyle sunulmalı (aksi halde `REFRESH_COOKIE_PATH`
+ayarlanmalı). Sunucuda `db` servisinin `ports:` satırını kaldır: veritabanı internete açık olmamalı.
 
 ## Test
 
@@ -142,6 +164,14 @@ pytest
 | `POST` | `/plan` | Konum, süre, bütçe, grup tipi ve tema/serbest metin tercihlerinden alternatif gün planları üretir (serbest metin belirsizse önce netleştirme sorusu döner) |
 | `POST` | `/route/approach` | Kullanıcının konumundan verilen noktaya (genelde ilk durak) tek ayaklık rota |
 | `POST` | `/route/legs` | Verilen durak listesi (sıra + koordinat) için ardışık ayakları yeniden hesaplar — durak silindiğinde/sırası değiştiğinde kullanılır |
+| `POST` | `/auth/register`, `/auth/login` | Hesap açar / giriş yapar; erişim token'ı döner, refresh token `httpOnly` çereze yazılır |
+| `POST` | `/auth/refresh`, `/auth/logout` | Çerezdeki refresh token'la yeni erişim token'ı alır (token döner) / oturumu kapatır ve token'ı iptal eder |
+| `GET`, `PATCH` | `/me` | Profil / kullanıcı adını değiştir (giriş gerekir) |
+| `POST` | `/me/password` | Mevcut şifreyi doğrulayıp yenisini belirler; diğer cihazlardaki oturumlar kapanır |
+| `POST`, `GET`, `DELETE` | `/plans`, `/plans/{id}` | Planı kaydet / kayıtlı planları listele / sil (giriş gerekir, yalnızca kendi planların) |
+| `GET` | `/shared/{id}` | Paylaşım linkiyle planı aç (girişsiz; sahibin kimliği dönmez, yalnızca `is_owner`) |
+| `GET`, `POST`, `DELETE` | `/favorites`, `/favorites/{place_id}` | Favori mekanlar (giriş gerekir; ekleme idempotent) |
+| `POST`, `GET`, `DELETE` | `/visits`, `/visits/{place_id}` | "Ulaşıldı" ziyaret kaydı, sık gidilenler, tek kaydı / tüm geçmişi silme (giriş gerekir) |
 
 ### `POST /plan` örnek istek
 
@@ -200,33 +230,12 @@ Bu ikinci istek her zaman normal `DayPlan` döner — belirsizlik kontrolü bir 
 ```bash
 cd frontend
 npm install
-cp .env.example .env
 ```
 
-`frontend/.env` içine Supabase proje bilgilerini yaz (Supabase Dashboard →
-Project Settings → API):
-
-| Değişken | Açıklama |
-| --- | --- |
-| `VITE_SUPABASE_URL` | Supabase proje URL'i |
-| `VITE_SUPABASE_ANON_KEY` | Supabase anon/public key (RLS ile korunur) |
-
-Hesap/favoriler özelliği için Supabase projende **SQL Editor**'de
-[`supabase/schema.sql`](supabase/schema.sql) dosyasının tamamını çalıştır
-(bir kerelik) — dört tabloyu (`profiles`, `saved_plans`, `favorite_places`,
-`visited_places`), RLS policy'lerini, `handle_new_user` trigger'ını ve
-`get_shared_plan` fonksiyonunu kurar.
-
-Dördünde de RLS açık. `profiles` select herkese açık (kullanıcı adları
-kamuya açık kabul edildi), güncelleme sadece sahibine. `saved_plans` select
-**sahibine kapalı** — eskiden "id tahmin edilemez" diye herkese açıktı ama
-bu, tabloyu toptan listeyen birinin tüm kullanıcıların planlarını
-görebilmesi demekti (IDOR, 2026-10-19'da düzeltildi); paylaşım linki artık
-RLS'i atlayan ama tek bir id'ye sabitlenmiş `get_shared_plan` adlı bir
-`SECURITY DEFINER` fonksiyonla sunuluyor. `favorite_places`/`visited_places`
-tamamen özel (select de sahibine kapalı) — bunlarda paylaşım kavramı yok.
-RLS kurulumu `pg_policies`/`pg_class.relrowsecurity` üzerinden doğrulandı
-(bkz. ROADMAP.md Milestone 4).
+Frontend için ortam değişkeni gerekmez; hesap/plan/favori istekleri backend'e `/api` üzerinden
+gider. Bunların çalışması için backend'in PostgreSQL'e bağlı olması gerekir (yukarıdaki
+"Veritabanı" bölümü). Oturum: kısa ömürlü erişim token'ı `localStorage`'da, uzun ömürlü
+refresh token `httpOnly` çerezde durur ve `frontend/src/auth.ts` süresi dolmadan sessizce yeniler.
 
 Dev server'ı çalıştır:
 

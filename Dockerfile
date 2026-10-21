@@ -8,6 +8,9 @@ WORKDIR /srv
 # Bağımlılıklar kaynak koddan önce kopyalanır ki katman önbelleğe alınsın.
 COPY pyproject.toml README.md ./
 COPY app ./app
+# Migration'lar imajda: `docker compose run --rm api alembic upgrade head`
+COPY alembic.ini ./
+COPY migrations ./migrations
 RUN pip install --no-cache-dir .
 
 # Root olmayan kullanıcı

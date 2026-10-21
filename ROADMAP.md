@@ -46,14 +46,17 @@ DESIGN.md'deki ekranlara birebir karşılık gelir.
 ## İnovasyon — Hesap, favoriler ve rota düzenleme
 
 Backend'e dokunmadan (auth tamamen frontend+Supabase'de) başlayıp, durak
-düzenlemeyle backend'e geri dönen bir seri. Hepsi ücretsiz kalacak şekilde
+düzenlemeyle backend'e geri dönen bir seri. (Geçmiş notu: hesap ve kayıtlar
+artık Supabase'te değil, kendi PostgreSQL'imizde — bkz. "Milestone 5". Bu
+bölümdeki Supabase maddeleri tarihsel kayıt olarak bırakıldı.) Hepsi ücretsiz kalacak şekilde
 tasarlandı: yeni Google Places/LLM çağrısı yok, zaten çekilen veriyi yeniden
 kullanıyor.
 
 - [x] **Supabase Auth**: giriş opsiyonel (misafir modu kalıyor) — kayıt,
   giriş, şifremi unuttum/sıfırlama (`frontend/src/auth.ts`,
   `screens/AccountScreen.tsx`). Backend bundan habersiz, kullanıcı kimliği
-  hiçbir endpoint'te doğrulanmıyor.
+  hiçbir endpoint'te doğrulanmıyor. **Güncel durum:** Supabase Auth kaldırıldı,
+  yerine backend'in kendi kayıt/giriş sistemi geldi (bkz. Milestone 5).
 - [x] **Kullanıcı adı**: `profiles` tablosu, `auth.users` insert'inde
   `SECURITY DEFINER` trigger ile otomatik satır (signUp'ın `options.data`
   metadata'sından); sonradan Hesabım'dan değiştirilebilir. Kısıtlama yok,
@@ -135,8 +138,8 @@ kullanıyor.
   filtresi var (ücretsiz); kullanıcının serbest metinle ("bunu beğenmedim,
   daha sakin bir yer olsun" gibi) tarif etmesi ve LLM'in havuzdan/yeni
   aramadan seçmesi — maliyet/karmaşıklık nedeniyle kapsam dışı tutuldu.
-- [ ] **Profil fotoğrafı**: Supabase Storage'da yeni bir bucket + RLS
-  policy'leri gerekiyor, henüz kurulmadı.
+- [ ] **Profil fotoğrafı**: Supabase Storage kaldırıldığı için dosya depolama
+  yeniden kararlaştırılmalı (sunucu diski, S3 uyumlu bir depo vb.); henüz yok.
 
 ## Milestone 4 — Public'e açılış hazırlığı
 
@@ -157,7 +160,9 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   varsa kullanıcı id'si (`sub`), yoksa/geçersizse `None` (misafir). Tamamen
   opsiyonel: secret ayarlanmazsa her istek misafir sayılır, backend'in
   auth'tan habersiz tasarımı bozulmaz. Şu an sadece `/plan`'da, misafir
-  kotasını atlamak için kullanılıyor.
+  kotasını atlamak için kullanılıyor. **Güncel durum:** artık Supabase JWT'si
+  değil, backend'in kendi ürettiği JWT doğrulanıyor (`app/core/security.py`,
+  zorunlu `JWT_SECRET`); `get_optional_user_id` aynı sözleşmeyi koruyor.
 - [x] **Misafir limitini sunucuda zorlama**: `app/core/guest_limit.py` —
   giriş yapmamış istekler için IP+gün bazlı bellek-içi sayaç
   (`guest_daily_plan_limit=3`, frontend'deki `GUEST_PLAN_LIMIT` ile aynı).
@@ -216,8 +221,8 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   ek bir savunma katmanı). `style-src` Tailwind/React'in olası satır içi
   stilleri için `'unsafe-inline'` içeriyor (script-src'de yok — asıl risk
   orada). `img-src` Leaflet karoları için `https://*.tile.openstreetmap.org`,
-  `connect-src` Supabase için `https://*.supabase.co` (+ `'self'`, `/api/*`
-  zaten aynı origin) içeriyor. `frame-ancestors` meta tag'de desteklenmediği
+  `connect-src` yalnızca `'self'` (`/api/*` aynı origin; Supabase kaldırılınca
+  `https://*.supabase.co` izni de çıkarıldı). `frame-ancestors` meta tag'de desteklenmediği
   için (yalnızca HTTP header) eklenmedi — gerçek web sunucusu kurulunca not
   edildi. Test: `npm run build` sonrası `frontend/dist`'i backend'e proxy'leyen
   yerel bir sunucu üzerinden Playwright ile gerçek bir plan üretimi (harita
@@ -237,9 +242,11 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   kullanıcı `/plan`'da yalnızca dakikada 10 ile sınırlı, günlük sınır yok;
   hesap açmak ücretsiz olduğundan maliyet riski var. Kullanıcı bazlı günlük
   sınır düşünülebilir.
-- [ ] **Rate limit — Supabase giriş/kayıt/şifre sıfırlama**: bu istekler
-  backend'e uğramaz, backend limiti uygulanmaz; Supabase panelindeki
-  Auth rate limit ayarları kontrol edilmeli. (Misafir kotası IP'ye bağlı:
+- [x] **Rate limit — giriş/kayıt**: auth artık backend'de; `/auth/register`
+  `5/dakika`, `/auth/login` `10/dakika`, `/auth/refresh` `30/dakika`,
+  `/me/password` `5/dakika` (IP bazlı). Açık kalan: hesap bazlı kilitleme
+  (aynı e-postaya dağıtık denemeler IP limitini aşar) ve şifre sıfırlama
+  endpoint'i henüz yok. (Misafir kotası IP'ye bağlı:
   paylaşılan ağlarda kota paylaşılır, VPN ile aşılabilir — kabul edilen sınır;
   asıl koruma Google/Groq harcama limitleri.)
 - [x] **IDOR / sahiplik — `saved_plans` listelenebiliyordu (düzeltildi,
@@ -266,7 +273,8 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   `/docs`, `/redoc`, `/openapi.json` artık `DEBUG=false` iken (yayın
   varsayılanı) tamamen kapalı. README'de `uvicorn --proxy-headers` +
   reverse proxy/HTTPS notu eklendi.
-- [x] **Supabase RLS denetimi**: panelden `pg_policies`/`pg_class`/`pg_proc`
+- [x] **Supabase RLS denetimi** (tarihsel; Supabase kaldırıldı — sahiplik
+  kontrolü artık backend'de, bkz. Milestone 5): panelden `pg_policies`/`pg_class`/`pg_proc`
   üzerinden canlı kurulum çıkarılıp doğrulandı (2026-10-05). `profiles`:
   select herkese açık, insert/update sahibi (`auth.uid() = id`).
   `saved_plans`: select herkese açık (gizlilik modeli uuid'nin tahmin
@@ -336,21 +344,23 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   başlığı (önce kısa süreyle), tarayıcı Console'da mixed content olmaması
   (`http://` taraması), `uvicorn --proxy-headers` ile `X-Forwarded-Proto`/`-For`
   iletimi. Konum izni (`navigator.geolocation`) yalnızca HTTPS'te çalıştığı
-  için navigasyon modu telefonda canlı adreste ayrıca denenmeli; Supabase
-  e-posta bağlantıları (`https` canlı adres) de kontrol edilmeli.
-- [ ] **Supabase canlı ayarları**: ücretli pakete geçiş ve yedekleme, Site
-  URL/Redirect URLs'e canlı adres (localhost çıkarılır), e-posta doğrulama,
-  canlı için kendi SMTP'si (varsayılan e-posta servisi çok düşük limitli),
-  `SUPABASE_JWT_SECRET`'in canlı ortamda doldurulması (boşsa herkes misafir).
-  Yedekleme: otomatik yedeklerin açık olduğunu panelden doğrula ve ayrı bir
-  test projesinde bir kez geri yüklemeyi dene (yedekleme kapsamı/saklama süresi
-  pakete göre değişir, güncel koşullar Supabase sayfasından doğrulanmalı).
-  PITR, kendi `pg_dump` kopyası ve yazılı felaket planı kullanıcı sayısı
-  artınca değerlendirilecek. `.env` içeriğinin kopyası da güvenli bir yerde
-  (şifre yöneticisi/secret yöneticisi) tutulmalı.
-- [ ] **Deploy**: backend için `Dockerfile` (şu an yok) ve bir barındırma
-  seçimi; frontend `vite build` çıktısının statik barındırılması; ortam
-  başına (`dev`/`prod`) ayrı Supabase projesi ve API anahtarları.
+  için navigasyon modu telefonda canlı adreste ayrıca denenmeli. Refresh
+  cookie'si `Secure` olduğu için (`COOKIE_SECURE=true`) HTTPS olmadan oturum
+  yenilenmez; bu da bu maddeyi zorunlu kılar.
+- [ ] **PostgreSQL canlı ayarları** (Supabase'in yerine): `db` servisinin
+  `ports:` satırı sunucuda tamamen silinmeli (veritabanı internete açık
+  olmamalı, yalnızca `api` konteyneri `db` adıyla erişmeli); `POSTGRES_PASSWORD`
+  PC'dekinden bağımsız, uzun ve rastgele olmalı; düzenli `pg_dump` yedeği ve en
+  az bir kez geri yükleme denemesi (`pgdata` volume'u tek başına yedek değildir);
+  `JWT_SECRET` canlıya özel üretilmeli; `COOKIE_SECURE=true` (varsayılan) ve
+  `REFRESH_COOKIE_PATH` tarayıcının gördüğü adresle eşleşmeli. `.env` içeriğinin
+  kopyası güvenli bir yerde (şifre yöneticisi/secret yöneticisi) tutulmalı.
+- [ ] **Deploy**: `Dockerfile` ve `docker-compose.yml` var (yerelde `db` +
+  `api`); henüz yok: bir barındırma seçimi, frontend `vite build` çıktısının
+  statik barındırılması ve `/api` altında API ile aynı adreste sunulması, açılışta
+  `alembic upgrade head` çalıştıran bir adım (Dockerfile migration dosyalarını
+  taşıyor ama otomatik çalıştırmıyor), ortam başına (`dev`/`prod`) ayrı veritabanı
+  ve API anahtarları. Not: Dockerfile'ın `api` imajı bu ortamda derlenip denenmedi.
 - [ ] **CI**: GitHub Actions ile `ruff check`, `pytest`, frontend `tsc -b` ve
   `oxlint` (şu an hiçbiri otomatik koşmuyor, `.github/` yok).
 - [ ] **Bağımlılık taraması (dependency scanning)**: bilinen güvenlik
@@ -383,7 +393,9 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   isteği kimlik (`sub`) ile kaydedilmeli mi, KVKK değerlendirmesiyle birlikte
   karar verilecek. Kaydet/sil/favori gibi veri değişiklikleri backend'e
   uğramaz; bunların izi Supabase panelindeki Auth/veritabanı log'larındadır
-  (saklama süresi plana bağlı, kontrol edilmeli). Uvicorn erişim log'unun
+  (saklama süresi plana bağlı, kontrol edilmeli). **Güncel durum:** artık
+  bu istekler backend'e uğruyor, yani kimlik (`sub`) ile loglanabilirler; ama
+  kimlik/audit log'u henüz yazılmıyor. Uvicorn erişim log'unun
   proxy arkasında doğru istemci IP'sini yazdığı doğrulanmalı.
 - [ ] **Log'a girenlerin temizlenmesi**: kullanıcı metni (`geocoding.py` adres,
   `orchestrator.py` şehir) satır sonu karakterleri temizlenerek yazılmalı (log
@@ -396,8 +408,8 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
 
 - [ ] **Gizlilik politikası ve konum izni metni**: konum yalnızca tarayıcıda
   kullanılıp Routes API'ye gönderiliyor; ne toplandığı/saklandığı açıkça
-  yazılsın. Hesap silme (Supabase kullanıcısı ve `saved_plans` kayıtları)
-  için bir yol düşünülmeli. Ayrıntısı aşağıdaki KVKK maddelerinde.
+  yazılsın. Hesap silme (`users` kaydı ve ona bağlı tüm veriler) için bir yol
+  düşünülmeli. Ayrıntısı aşağıdaki KVKK maddelerinde.
 
 #### KVKK (6698 sayılı Kanun) hazırlığı
 
@@ -409,21 +421,24 @@ VERBİS kaydı, yurt dışı aktarım şartları) bir hukuk uzmanıyla netleşti
 
 | Veri | Nerede | Kaynak |
 |---|---|---|
-| E-posta, şifre (Supabase Auth'ta), kullanıcı adı | Supabase `auth.users`, `profiles` | Kayıt |
-| Kaydedilen planlar (durak, konum, `user_id`) | Supabase `saved_plans` | Kullanıcı |
-| Favori mekanlar (ad, adres, koordinat) | Supabase `favorite_places` | Kullanıcı |
-| Ziyaret geçmişi (mekan, koordinat, ziyaret sayısı, son ziyaret zamanı) | Supabase `visited_places` | "Ulaşıldı" işaretlemesi |
+| E-posta, kullanıcı adı, şifre (yalnızca argon2 özeti) | Kendi PostgreSQL'imiz, `users` | Kayıt |
+| Oturum yenileme token'ı (yalnızca SHA-256 özeti, IP/cihaz bilgisi tutulmaz) | PostgreSQL `refresh_tokens` | Giriş |
+| Kaydedilen planlar (durak, konum, `user_id`) | PostgreSQL `saved_plans` | Kullanıcı |
+| Favori mekanlar (ad, adres, koordinat) | PostgreSQL `favorite_places` | Kullanıcı |
+| Ziyaret geçmişi (mekan, koordinat, ziyaret sayısı, son ziyaret zamanı) | PostgreSQL `visited_places` | "Ulaşıldı" işaretlemesi |
 | Şehir/adres metni, koordinat, serbest metin, tercihler | Backend isteği; Google/Groq/Open-Meteo'ya iletilir; kısmen log'a düşer | Plan formu |
 | IP adresi | Rate limit ve misafir kotası (bellekte), uvicorn erişim log'u | Her istek |
 | Anlık cihaz konumu (navigasyon) | `watchPosition` → `/route/approach` → Google Routes; kodda kalıcı saklandığı yer görülmedi | Cihaz |
-| Oturum token'ı, tema, misafir plan sayacı | Tarayıcı `localStorage` (çerez yok) | İstemci |
+| Erişim token'ı (15 dk), tema, misafir plan sayacı | Tarayıcı `localStorage` | İstemci |
+| Refresh token (30 gün) | **Çerez** (`rota_refresh`, `HttpOnly`, `SameSite=Strict`, `Secure`) | Giriş |
 
 **Üçüncü taraflar / yurt dışı aktarım:** Google (Geocoding, Places, Routes),
 Groq (serbest metin, tercihler, mekan listesi LLM'e gider), Open-Meteo
-(koordinat), Supabase (hesap ve kayıtlar). Her birinin sunucu bölgesi ve
-sözleşme koşulları kontrol edilip aydınlatma metninde yazılmalı; yurt dışına
-aktarım şartları hukuken değerlendirilmeli. Supabase projesinin bölgesi
-(AB/ABD vb.) seçilmiş mi bakılmalı.
+(koordinat). Hesap ve kayıtlar artık üçüncü tarafta değil, kendi
+sunucumuzdaki PostgreSQL'de (Supabase'e yurt dışı aktarım kalktı; sunucunun
+konumu ve barındırıcı yine aydınlatma metninde belirtilmeli). Her birinin
+sunucu bölgesi ve sözleşme koşulları kontrol edilip aydınlatma metninde
+yazılmalı; yurt dışına aktarım şartları hukuken değerlendirilmeli.
 
 **Yapılacaklar:**
 - [ ] **Aydınlatma metni**: veri sorumlusu kimliği ve iletişim, hangi verinin
@@ -434,12 +449,12 @@ aktarım şartları hukuken değerlendirilmeli. Supabase projesinin bölgesi
   konumu (navigasyon) ve ziyaret geçmişi ayrı ayrı anlatılsın; konumun açık
   rıza gerektirip gerektirmediği hukuki olarak netleştirilsin. Tarayıcı konum
   izni isteminden önce kısa bir açıklama gösterilsin.
-- [ ] **Silme hakkı**: hesap silme akışı (Supabase kullanıcısı, `profiles`,
-  `saved_plans`, `favorite_places`, `visited_places`; tabloların hepsi
-  `on delete cascade` ile `auth.users`'a bağlı, yani kullanıcı silinince
-  satırlar gider; ama bu akışı kullanıcı kendi başına başlatamıyor). Ayrıca
-  `visited_places` için bilerek DELETE policy'si yok (`schema.sql`); kullanıcı
-  ziyaret geçmişini temizleyemiyor, bu silme hakkıyla çelişir.
+- [ ] **Silme hakkı**: hesap silme akışı (`users`, `saved_plans`,
+  `favorite_places`, `visited_places`, `refresh_tokens`; hepsi `on delete
+  cascade` ile `users`'a bağlı, yani kullanıcı silinince satırlar gider; ama
+  kullanıcının bunu kendi başına başlatacağı bir `DELETE /me` endpoint'i ve
+  ekranı henüz yok). Ziyaret geçmişini temizleme **yapıldı**: `DELETE /visits`
+  (tümü) ve `DELETE /visits/{place_id}`.
 - [ ] **Erişim / taşınabilirlik**: kullanıcının kendi verisini görebilmesi ve
   dışa aktarabilmesi (Hesabım'dan JSON indir gibi).
 - [ ] **Paylaşılan planlar**: toptan listelenebilme sorunu düzeltildi (bkz.
@@ -454,7 +469,7 @@ aktarım şartları hukuken değerlendirilmeli. Supabase projesinin bölgesi
   kayıtları buna dayanak olacak.
 - [ ] **VERBİS / kayıt yükümlülüğü**: uygulamanın işletici statüsüne göre
   gerekip gerekmediği hukuken kontrol edilmeli.
-- [ ] **Sağlayıcı sözleşmeleri**: Google, Groq, Supabase için veri işleme
+- [ ] **Sağlayıcı sözleşmeleri**: Google, Groq ve barındırıcı için veri işleme
   şartları/DPA incelenmeli; Groq'a giden kullanıcı serbest metninin
   eğitimde kullanılmadığı ayarı doğrulanmalı.
 - [ ] **Çocuklar**: yaş sınırı ve ebeveyn onayı gerekliliği değerlendirilmeli.
@@ -463,6 +478,52 @@ aktarım şartları hukuken değerlendirilmeli. Supabase projesinin bölgesi
 - [ ] **LLM çıktı kalitesi**: planların Türkçe dönmesi prompt'ta zorlandı
   ama rastgele kayma tamamen ölçülmedi; birkaç gerçek çıktıyla kontrol, gerekirse
   `temperature` düşürme.
+
+## Milestone 5 — Supabase'ten kendi PostgreSQL'imize geçiş
+
+Gerekçe: kullanıcı verilerinin kendi sunucumuzda tutulması. Sıra: altyapı →
+modeller/migration → auth → veri endpoint'leri → frontend → refresh token.
+Eski Supabase kullanıcıları taşınmadı (sıfırdan başlandı).
+
+**Yapıldı:**
+- [x] **Altyapı**: `docker-compose.yml` (`db`: `postgres:16-alpine`, host portu
+  `127.0.0.1:5433`; `api`), `Dockerfile`, `.dockerignore`. Port 5433 çünkü 5432
+  geliştirme makinesinde başka bir süreçte kullanımda.
+- [x] **Veritabanı katmanı**: SQLAlchemy 2 (async) + asyncpg + Alembic
+  (`app/db/`, `migrations/`). Tablolar: `users` (Supabase `auth.users` +
+  `profiles` birleşti), `saved_plans`, `favorite_places`, `visited_places`,
+  `refresh_tokens`. Migration'lar: 0001 ilk şema, 0002 büyük/küçük harf duyarsız
+  benzersiz kullanıcı adı, 0003 refresh token. Testler bellekte SQLite ile
+  koşar (gerçek Postgres gerekmez).
+- [x] **Kendi auth'umuz**: `/auth/register`, `/auth/login`, `/auth/refresh`,
+  `/auth/logout`, `/me` (profil, kullanıcı adı), `/me/password`. Şifre argon2;
+  erişim token'ı 15 dk'lık HS256 JWT; giriş hatası kullanıcının var olup
+  olmadığını sızdırmaz; e-posta küçük harfe normalize edilir.
+- [x] **Refresh token**: `httpOnly`/`SameSite=Strict` çerez, veritabanında yalnızca
+  SHA-256 özeti, her yenilemede döner, iptal edilmiş token süre dışı tekrar
+  gelirse tüm aile kapanır (10 sn tolerans: iki sekme aynı anda yenileyebilir),
+  şifre değişince diğer oturumlar kapanır.
+- [x] **Veri endpoint'leri** (hepsi sahiplik kontrollü, girdi sınırlı):
+  `/plans` + `/shared/{id}` (girişsiz; sahibin kimliği dönmez, yerine `is_owner`),
+  `/favorites`, `/visits` (atomik sayaç, geçmişi temizleme).
+- [x] **Frontend**: `@supabase/supabase-js` ve `supabase.ts` kaldırıldı;
+  `auth.ts` kendi oturum deposu + sessiz yenileme; veri modülleri backend'i çağırır.
+- [x] **Sahiplik/IDOR**: Supabase RLS'in yerine her sorguda `WHERE user_id = :me`;
+  başkasının kaynağı ile olmayan kaynak aynı 404'ü verir. Testlerle doğrulandı.
+
+**Açık:**
+- [ ] **Şifre sıfırlama ("şifremi unuttum")**: SMTP servisi seçimi gerekir; şu an
+  şifresini unutan kullanıcı hesabına dönemez. Frontend'den bağlantı kaldırıldı.
+- [ ] **Hesap silme (`DELETE /me`) ve veri dışa aktarma**: KVKK maddeleriyle birlikte.
+- [ ] **E-posta doğrulama**: yok; kayıt olan herkes e-postası doğrulanmadan
+  oturum açıyor. SMTP ile birlikte değerlendirilmeli.
+- [ ] **Hesap bazlı brute-force koruması**: yalnızca IP bazlı limit var.
+- [ ] **Tüm cihazlardan çıkış** düğmesi (backend `revoke_all_for_user` hazır).
+- [ ] **Frontend'in oturum mantığı tarayıcıda otomatik test edilmiyor**
+  (`auth.ts` zamanlayıcı/sekme senkronu elle denenmeli).
+- [ ] **`api` konteynerinin derlenmesi/çalıştırılması** doğrulanmadı;
+  `alembic upgrade head` otomatik çalışmıyor.
+- [ ] **Eski Supabase verisi**: gerçek kullanıcı varsa taşıma yapılmadı.
 
 ## Öncelik dışı / fikir aşamasında
 
