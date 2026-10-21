@@ -145,3 +145,20 @@ class DailyUsage(Base):
     day: Mapped[date] = mapped_column(Date, primary_key=True)
     plans: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     legs: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+class PasswordResetToken(Base):
+    """Şifre sıfırlama bağlantısındaki tek kullanımlık token. Ham değer yalnızca e-postadaki
+    bağlantıda; veritabanında SHA-256 özeti (sızarsa kullanılamaz)."""
+
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

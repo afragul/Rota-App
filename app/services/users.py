@@ -8,6 +8,7 @@ from app.core.security import hash_password, verify_password
 from app.db.models import (
     DailyUsage,
     FavoritePlace,
+    PasswordResetToken,
     RefreshToken,
     SavedPlan,
     User,
@@ -117,7 +118,14 @@ async def delete_account(session: AsyncSession, user_id: uuid.UUID, password: st
     user = await get_user(session, user_id)
     if not await verify_password(user.password_hash, password):
         raise InvalidCredentialsError
-    for table in (RefreshToken, SavedPlan, FavoritePlace, VisitedPlace, DailyUsage):
+    for table in (
+        RefreshToken,
+        SavedPlan,
+        FavoritePlace,
+        VisitedPlace,
+        DailyUsage,
+        PasswordResetToken,
+    ):
         await session.execute(
             delete(table)
             .where(table.user_id == user_id)

@@ -1,7 +1,17 @@
 import type { Session } from '../auth'
 import { useEffect, useState } from 'react'
 import { ApiError } from '../api'
-import { changePassword, deleteAccount, signIn, signOut, signUp, updateUsername } from '../auth'
+import {
+  changePassword,
+  deleteAccount,
+  fetchAuthCapabilities,
+  requestPasswordReset,
+  resetPassword,
+  signIn,
+  signOut,
+  signUp,
+  updateUsername,
+} from '../auth'
 import { Icon } from '../components/Icon'
 import { listFavoritePlaces, removeFavoritePlace, type FavoritePlace } from '../favoritePlaces'
 import { mapsUrl } from '../meta'
@@ -19,9 +29,12 @@ function authErrorText(err: unknown): string {
 interface Props {
   session: Session | null
   onOpenSaved: (id: string) => void
+  /** E-postadaki sıfırlama bağlantısından gelen token (varsa yeni şifre formu açılır). */
+  resetToken: string | null
+  onResetDone: () => void
 }
 
-type Mode = 'login' | 'register'
+type Mode = 'login' | 'register' | 'forgot'
 type PlanSummary = SavedPlanSummary
 
 // Kısıtlama yok, sadece emoji yasak (Unicode "resimsel" sembol aralığı).
@@ -104,6 +117,79 @@ function ChangePasswordForm({ onDone }: { onDone: () => void }) {
           {submitting ? 'Kaydediliyor...' : 'Şifreyi güncelle'}
         </button>
       </div>
+    </form>
+  )
+}
+
+// E-postadaki bağlantıyla gelen kullanıcı: yeni şifreyi belirler. Token tek kullanımlık ve
+// süreli; geçersizse backend'in mesajı gösterilir ve yeni bağlantı istemesi söylenir.
+function ResetPasswordForm({ token, onDone, onCancel }: { token: string; onDone: () => void; onCancel: () => void }) {
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (password !== confirm) {
+      setError('Şifreler eşleşmiyor')
+      return
+    }
+    setSubmitting(true)
+    setError(null)
+    try {
+      await resetPassword(token, password)
+      onDone()
+    } catch (err) {
+      setError(authErrorText(err))
+      setSubmitting(false)
+    }
+  }
+
+  const field = (id: string, label: string, value: string, set: (v: string) => void) => (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="font-label-md text-label-md text-ink font-semibold">
+        {label}
+      </label>
+      <input
+        id={id}
+        type="password"
+        autoComplete="new-password"
+        required
+        minLength={8}
+        maxLength={128}
+        value={value}
+        onChange={(e) => set(e.target.value)}
+        className={inputClass}
+      />
+    </div>
+  )
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-space-md pt-space-lg">
+      <div className="flex flex-col gap-1.5 mb-2">
+        <h2 className="font-headline-xl-mobile text-headline-xl-mobile text-ink tracking-tight">Yeni şifre belirle</h2>
+        <p className="font-body-md text-body-md text-text-secondary">
+          Hesabın için yeni bir şifre seç. Şifren değişince diğer cihazlardaki oturumların kapanır.
+        </p>
+      </div>
+      {field('reset-password', 'Yeni şifre (en az 8 karakter)', password, setPassword)}
+      {field('reset-password-confirm', 'Yeni şifre (tekrar)', confirm, setConfirm)}
+      {error && (
+        <div className="bg-error-container/60 rounded-xl p-space-sm" role="alert">
+          <p className="font-body-sm text-body-sm text-on-error-container">{error}</p>
+        </div>
+      )}
+      <button
+        type="submit"
+        disabled={submitting}
+        className="h-12 rounded-xl bg-plan-a text-on-primary font-label-md text-label-md disabled:opacity-50"
+      >
+        {submitting ? 'Kaydediliyor...' : 'Şifreyi güncelle'}
+      </button>
+      <button type="button" onClick={onCancel} className="font-label-md text-label-md text-primary">
+        Vazgeç
+      </button>
     </form>
   )
 }
@@ -440,21 +526,46 @@ function LoggedInPanel({
 
 // Giriş opsiyonel: uygulama misafir olarak da kullanılabilir, bu ekran sadece
 // hesap oluşturup giriş yapmak isteyenler için (bkz. Shell'deki hesap ikonu).
-export function AccountScreen({ session, onOpenSaved }: Props) {
+export function AccountScreen({ session, onOpenSaved, resetToken, onResetDone }: Props) {
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [username, setUsername] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Hesap silinince oturum kapanır ve bu bileşen giriş formuna döner; kullanıcı ne olduğunu görsün.
   const [notice, setNotice] = useState<string | null>(null)
+  // Sunucuda SMTP yoksa "şifremi unuttum" gösterilmez (bkz. auth.ts::fetchAuthCapabilities).
+  const [canReset, setCanReset] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    void fetchAuthCapabilities().then((c) => alive && setCanReset(c.password_reset))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // Sıfırlama bağlantısı oturumdan önce gelir: giriş yapmış olsa bile yeni şifre sorulur.
+  if (resetToken) {
+    return (
+      <ResetPasswordForm
+        token={resetToken}
+        onCancel={onResetDone}
+        onDone={() => {
+          onResetDone()
+          setMode('login')
+          setNotice('Şifren güncellendi. Yeni şifrenle giriş yapabilirsin.')
+        }}
+      />
+    )
+  }
 
   if (session) {
     return (
       <LoggedInPanel
         session={session}
         onOpenSaved={onOpenSaved}
+        // Hesap silinince oturum kapanır ve bu bileşen giriş formuna döner; kullanıcı ne olduğunu görsün.
         onAccountDeleted={() => setNotice('Hesabın ve tüm verilerin kalıcı olarak silindi.')}
       />
     )
@@ -473,7 +584,11 @@ export function AccountScreen({ session, onOpenSaved }: Props) {
     setNotice(null)
 
     try {
-      if (mode === 'register') {
+      if (mode === 'forgot') {
+        // Cevap hesap var olsun olmasın aynı: "kayıtlıysa gönderdik" demekten fazlasını bilmiyoruz.
+        await requestPasswordReset(email)
+        setNotice('Bu e-posta kayıtlıysa şifre sıfırlama bağlantısı gönderdik. Gelen kutunu ve spam klasörünü kontrol et.')
+      } else if (mode === 'register') {
         const normalized = username.trim()
         if (invalidUsername(normalized)) {
           setError('Kullanıcı adı boş olamaz ve emoji içeremez')
@@ -495,10 +610,12 @@ export function AccountScreen({ session, onOpenSaved }: Props) {
     <form onSubmit={submit} className="flex flex-col gap-space-md pt-space-lg">
       <div className="flex flex-col gap-1.5 mb-2">
         <h2 className="font-headline-xl-mobile text-headline-xl-mobile text-ink tracking-tight">
-          {mode === 'login' ? 'Giriş Yap' : 'Hesap Oluştur'}
+          {mode === 'login' ? 'Giriş Yap' : mode === 'register' ? 'Hesap Oluştur' : 'Şifremi Unuttum'}
         </h2>
         <p className="font-body-md text-body-md text-text-secondary">
-          Giriş yapmak zorunlu değil, uygulamayı misafir olarak da kullanabilirsin.
+          {mode === 'forgot'
+            ? 'E-posta adresini gir, sana şifre sıfırlama bağlantısı gönderelim.'
+            : 'Giriş yapmak zorunlu değil, uygulamayı misafir olarak da kullanabilirsin.'}
         </p>
       </div>
 
@@ -538,7 +655,7 @@ export function AccountScreen({ session, onOpenSaved }: Props) {
         />
       </div>
 
-      {(
+      {mode !== 'forgot' && (
         <div className="flex flex-col gap-1.5">
           <label htmlFor="account-password" className="font-label-md text-label-md text-ink font-semibold">
             Şifre
@@ -557,6 +674,11 @@ export function AccountScreen({ session, onOpenSaved }: Props) {
           {mode === 'register' && (
             <p className="font-body-sm text-body-sm text-text-secondary">En az 8 karakter.</p>
           )}
+          {mode === 'login' && canReset && (
+            <button type="button" onClick={() => switchMode('forgot')} className="self-end font-label-sm text-label-sm text-primary">
+              Şifremi unuttum
+            </button>
+          )}
         </div>
       )}
 
@@ -565,6 +687,7 @@ export function AccountScreen({ session, onOpenSaved }: Props) {
           <p className="font-body-md text-body-md text-ink">{notice}</p>
         </div>
       )}
+
       {error && (
         <div className="bg-error-container/60 rounded-xl p-space-sm" role="alert">
           <p className="font-body-sm text-body-sm text-on-error-container">{error}</p>
@@ -576,15 +699,15 @@ export function AccountScreen({ session, onOpenSaved }: Props) {
         disabled={submitting}
         className="h-12 rounded-xl bg-plan-a text-on-primary font-label-md text-label-md disabled:opacity-50"
       >
-        {submitting ? 'Gönderiliyor...' : mode === 'login' ? 'Giriş Yap' : 'Kayıt Ol'}
+        {submitting ? 'Gönderiliyor...' : mode === 'login' ? 'Giriş Yap' : mode === 'register' ? 'Kayıt Ol' : 'Bağlantı gönder'}
       </button>
 
       <button
         type="button"
-        onClick={() => switchMode(mode === 'register' ? 'login' : 'register')}
+        onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
         className="font-label-md text-label-md text-primary"
       >
-        {mode === 'login' ? 'Hesabın yok mu? Kayıt ol' : 'Zaten hesabın var mı? Giriş yap'}
+        {mode === 'login' ? 'Hesabın yok mu? Kayıt ol' : mode === 'register' ? 'Zaten hesabın var mı? Giriş yap' : 'Giriş ekranına dön'}
       </button>
     </form>
   )

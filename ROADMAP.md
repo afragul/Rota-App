@@ -438,6 +438,8 @@ VERBİS kaydı, yurt dışı aktarım şartları) bir hukuk uzmanıyla netleşti
 |---|---|---|
 | E-posta, kullanıcı adı, şifre (yalnızca argon2 özeti) | Kendi PostgreSQL'imiz, `users` | Kayıt |
 | Oturum yenileme token'ı (yalnızca SHA-256 özeti, IP/cihaz bilgisi tutulmaz) | PostgreSQL `refresh_tokens` | Giriş |
+| Şifre sıfırlama token'ı (SHA-256 özeti, 1 saat; kullanılınca/yenisi gelince silinir) | PostgreSQL `password_reset_tokens` | "Şifremi unuttum" |
+| E-posta adresi + sıfırlama bağlantısı | SMTP sağlayıcısına iletilir | "Şifremi unuttum" |
 | Kaydedilen planlar (durak, konum, `user_id`) | PostgreSQL `saved_plans` | Kullanıcı |
 | Favori mekanlar (ad, adres, koordinat) | PostgreSQL `favorite_places` | Kullanıcı |
 | Ziyaret geçmişi (mekan, koordinat, ziyaret sayısı, son ziyaret zamanı) | PostgreSQL `visited_places` | "Ulaşıldı" işaretlemesi |
@@ -447,7 +449,7 @@ VERBİS kaydı, yurt dışı aktarım şartları) bir hukuk uzmanıyla netleşti
 | Erişim token'ı (15 dk), tema, misafir plan sayacı | Tarayıcı `localStorage` | İstemci |
 | Refresh token (30 gün) | **Çerez** (`rota_refresh`, `HttpOnly`, `SameSite=Strict`, `Secure`) | Giriş |
 
-**Üçüncü taraflar / yurt dışı aktarım:** Google (Geocoding, Places, Routes),
+**Üçüncü taraflar / yurt dışı aktarım:** E-posta (SMTP) sağlayıcısı (seçilince; yalnızca şifre sıfırlama e-postasının adresi ve içeriği), Google (Geocoding, Places, Routes),
 Groq (serbest metin, tercihler, mekan listesi LLM'e gider), Open-Meteo
 (koordinat). Hesap ve kayıtlar artık üçüncü tarafta değil, kendi
 sunucumuzdaki PostgreSQL'de (Supabase'e yurt dışı aktarım kalktı; sunucunun
@@ -530,8 +532,17 @@ Eski Supabase kullanıcıları taşınmadı (sıfırdan başlandı).
   başkasının kaynağı ile olmayan kaynak aynı 404'ü verir. Testlerle doğrulandı.
 
 **Açık:**
-- [ ] **Şifre sıfırlama ("şifremi unuttum")**: SMTP servisi seçimi gerekir; şu an
-  şifresini unutan kullanıcı hesabına dönemez. Frontend'den bağlantı kaldırıldı.
+- [x] **Şifre sıfırlama ("şifremi unuttum")**: `/auth/forgot`, `/auth/reset`,
+  `/auth/capabilities`; genel SMTP (stdlib `smtplib`, yeni bağımlılık yok), token
+  tek kullanımlık/1 saat/özet olarak saklanır ve bağlantıda fragment'te (`#reset=`),
+  hesap var/yok aynı cevap, e-posta arka planda, hesap başına 60 sn bekleme, sıfırlama
+  tüm oturumları kapatır (migration 0005). **SMTP yoksa özellik kapalı** ve arayüz
+  bağlantıyı göstermez. Gerçek bir SMTP konuşmasıyla (yerel sahte sunucu) uçtan uca
+  denendi; `starttls`/`ssl` modları yalnızca birim testle (gerçek sertifikalı sunucuyla
+  denenmedi). **Açık:** bir e-posta sağlayıcısı seçilip `.env`'ye SMTP bilgileri
+  yazılmalı (+ gönderen alan adı için SPF/DKIM, yoksa e-postalar spam'e düşer);
+  `FRONTEND_BASE_URL` yayında gerçek adres olmalı; sıfırlama sayfası tarayıcıda
+  elle denenmedi.
 - [x] **Hesap silme (frontend)**: `DELETE /me` ve Hesabım'daki "Hesabımı sil" akışı yapıldı.
 - Veri dışa aktarma bilinçli olarak yapılmıyor (karar: hiçbir şekilde).
 - [ ] **E-posta doğrulama**: yok; kayıt olan herkes e-postası doğrulanmadan

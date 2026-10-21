@@ -45,7 +45,7 @@ Sistem bu tercihlere göre:
 
 - Konum/tercih seçimi, sonuç ve plan detayı ekranları; açık/koyu tema anahtarı
 - Canlı navigasyon modu, plan detayında durakları sil/sırala/değiştir/taşı/ekle
-- **Hesap** (backend'in kendi auth'u, PostgreSQL): giriş opsiyonel (misafir modu var), kayıt/giriş, kullanıcı adı ve şifre değiştirme, sessiz oturum yenileme. Şifre sıfırlama ("şifremi unuttum") henüz yok
+- **Hesap** (backend'in kendi auth'u, PostgreSQL): giriş opsiyonel (misafir modu var), kayıt/giriş, kullanıcı adı ve şifre değiştirme, sessiz oturum yenileme, hesabı silme, "şifremi unuttum" (SMTP ayarlıysa; bkz. ortam değişkenleri)
 - Rota kaydetme/favorileme ve link ile paylaşım (`saved_plans` tablosu, `/plans` ve `/shared/{id}`)
 - Mekan bazlı favorileme (`favorite_places` tablosu, rotadan bağımsız) — plan detayındaki her durakta kalp ikonu, Hesabım'da liste, "+ Durak ekle" sayfasında "Favorilerimden ekle" sekmesiyle herhangi bir rotaya eklenebilir
 - Sık gidilen yerler: "Ulaşıldı" işaretlemeleri `visited_places` tablosuna kalıcı ziyaret sayacı olarak işlenir; ana sayfada en sık gidilen 5 mekan tıklanabilir kart olarak çıkar, tıklanınca o mekan garanti rotaya girer (tercihler yine sorulur)
@@ -106,6 +106,10 @@ cp .env.example .env
 | `MAX_SAVED_PLANS_PER_USER`, `MAX_FAVORITES_PER_USER`, `MAX_VISITED_PLACES_PER_USER` | hayır | Varsayılan: `100`, `200`, `500`. Kullanıcı başına depolama üst sınırları |
 | `USER_DAILY_PLAN_LIMIT` | hayır | Varsayılan: `30`. Giriş yapmış bir kullanıcının günlük `/plan` kotası (hesap açmak ücretsiz olduğundan ücretli Google/Groq çağrılarına hesap başına da üst sınır). Gün Türkiye saatine (UTC+3) göre; sayaç veritabanında tutulur |
 | `USER_DAILY_LEGS_LIMIT` | hayır | Varsayılan: `300`. Giriş yapmış bir kullanıcının günlük `/route/legs` kotası (`/plan`'dan ayrı sayaç) |
+| `SMTP_HOST`, `SMTP_FROM` | hayır | Şifre sıfırlama e-postaları için SMTP sunucusu ve gönderen (`Rota <no-reply@alanadi.com>`). **Yoksa özellik kapalıdır:** `/auth/forgot` 503 verir, arayüz "şifremi unuttum" bağlantısını göstermez |
+| `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_SECURITY` | hayır | Varsayılan port `587`, güvenlik `starttls` (`ssl` = 465, `none` = yalnızca yerel test). Hangi sağlayıcı olursa (Gmail uygulama şifresi, Resend, SendGrid, Mailgun) SMTP bilgilerini buraya yaz |
+| `FRONTEND_BASE_URL` | hayır | Varsayılan: `http://localhost:5173`. E-postadaki sıfırlama bağlantısı bununla başlar; yayında frontend'in gerçek adresi olmalı |
+| `PASSWORD_RESET_EXPIRE_MINUTES`, `PASSWORD_RESET_COOLDOWN_SECONDS` | hayır | Varsayılan `60` ve `60`: bağlantının ömrü ve aynı hesaba iki e-posta arasındaki en kısa süre |
 | `CORS_ORIGINS` | hayır | Varsayılan: `http://localhost:5173`. Virgülle ayrılmış izinli origin listesi; prod'da frontend'in gerçek adresiyle değiştirilmeli |
 
 `PLACES_API_KEY`, `GEOCODING_API_KEY`, `ROUTES_API_KEY`, `GROQ_API_KEY` ve `JWT_SECRET` olmadan uygulama açılışta hata verir (bilinçli tercih, bkz. `app/core/config.py`). \* `DATABASE_URL`/`POSTGRES_PASSWORD` açılışta zorunlu değil, ama hesap/plan/favori/ziyaret endpoint'leri onsuz çalışmaz.
@@ -170,6 +174,8 @@ pytest
 | `POST` | `/route/approach` | Kullanıcının konumundan verilen noktaya (genelde ilk durak) tek ayaklık rota |
 | `POST` | `/route/legs` | Verilen durak listesi (sıra + koordinat) için ardışık ayakları yeniden hesaplar — durak silindiğinde/sırası değiştiğinde kullanılır |
 | `POST` | `/auth/register`, `/auth/login` | Hesap açar / giriş yapar; erişim token'ı döner, refresh token `httpOnly` çereze yazılır |
+| `POST` | `/auth/forgot`, `/auth/reset` | Şifre sıfırlama bağlantısı iste (hesap var olsun olmasın aynı cevap) / e-postadaki token'la yeni şifre belirle (tek kullanımlık, 1 saat; tüm oturumlar kapanır). SMTP gerektirir |
+| `GET` | `/auth/capabilities` | Sunucuda hangi hesap özellikleri açık (`password_reset`: SMTP var mı) |
 | `POST` | `/auth/refresh`, `/auth/logout` | Çerezdeki refresh token'la yeni erişim token'ı alır (token döner) / oturumu kapatır ve token'ı iptal eder |
 | `GET`, `PATCH`, `DELETE` | `/me` | Profil / kullanıcı adını değiştir / hesabı ve tüm veriyi kalıcı sil (giriş gerekir; silmede gövdede `{"password": ...}` istenir) |
 | `POST` | `/me/password` | Mevcut şifreyi doğrulayıp yenisini belirler; diğer cihazlardaki oturumlar kapanır |
