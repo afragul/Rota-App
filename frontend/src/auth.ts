@@ -168,6 +168,15 @@ export async function changePassword(currentPassword: string, newPassword: strin
   })
 }
 
+// Hesabı ve tüm verisini kalıcı siler (backend şifreyi doğrular, çerezi de sildirir). Yanlış
+// şifrede fırlatır ve oturum açık kalır; başarıda yerel oturum kapanır. Çıkış çağrısı
+// (/auth/logout) gerekmez: refresh token'lar sunucuda zaten silindi.
+export async function deleteAccount(password: string) {
+  if (!current) return
+  await apiRequest<void>('/me', { method: 'DELETE', body: { password }, token: current.access_token })
+  setSession(null)
+}
+
 // Token'la 401 alındı (erişim token'ı beklenenden önce geçersiz oldu): yenilemeyi dene;
 // o da reddedilirse refreshSession yerel oturumu kapatır.
 setUnauthorizedHandler(() => void refreshSession())
