@@ -362,10 +362,10 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   kopyası güvenli bir yerde (şifre yöneticisi/secret yöneticisi) tutulmalı.
 - [ ] **Deploy**: `Dockerfile` ve `docker-compose.yml` var (yerelde `db` +
   `api`); henüz yok: bir barındırma seçimi, frontend `vite build` çıktısının
-  statik barındırılması ve `/api` altında API ile aynı adreste sunulması, açılışta
-  `alembic upgrade head` çalıştıran bir adım (Dockerfile migration dosyalarını
-  taşıyor ama otomatik çalıştırmıyor), ortam başına (`dev`/`prod`) ayrı veritabanı
-  ve API anahtarları. `api` imajı derlenip denendi: konteynerde `alembic upgrade head`, `/health` ve kayıt (DB'ye yazma) çalıştı.
+  statik barındırılması ve `/api` altında API ile aynı adreste sunulması, ortam
+  başına (`dev`/`prod`) ayrı veritabanı ve API anahtarları. Migration'lar `api`
+  konteyneri açılırken otomatik uygulanır (`docker-entrypoint.sh`, tek kopya
+  varsayımı; çok kopyada `RUN_MIGRATIONS=false`). `api` imajı derlenip denendi: konteynerde `alembic upgrade head`, `/health` ve kayıt (DB'ye yazma) çalıştı.
 - [ ] **CI**: GitHub Actions ile `ruff check`, `pytest`, frontend `tsc -b` ve
   `oxlint` (şu an hiçbiri otomatik koşmuyor, `.github/` yok).
 - [ ] **Bağımlılık taraması (dependency scanning)**: bilinen güvenlik
@@ -528,9 +528,10 @@ Eski Supabase kullanıcıları taşınmadı (sıfırdan başlandı).
 - [ ] **Tüm cihazlardan çıkış** düğmesi (backend `revoke_all_for_user` hazır).
 - [ ] **Frontend'in oturum mantığı tarayıcıda otomatik test edilmiyor**
   (`auth.ts` zamanlayıcı/sekme senkronu elle denenmeli).
-- [ ] **Migration'ın otomatik çalışması**: `api` konteyneri açılışta
-  `alembic upgrade head` çalıştırmıyor; yeni ortamda elle çalıştırılmalı
-  (`docker compose run --rm api alembic upgrade head`).
+- [x] **Migration'ın otomatik çalışması**: `docker-entrypoint.sh` açılışta
+  `alembic upgrade head` uygular, başarısızsa konteyner hatayla çıkar. Boş
+  veritabanı, ikinci açılış, bozuk bağlantı ve `RUN_MIGRATIONS=false` denendi.
+  Açık: migration'dan önce yedek alma ve geri alma (downgrade) prosedürü yok.
 - [ ] **Eski Supabase verisi**: gerçek kullanıcı varsa taşıma yapılmadı.
 
 ## Öncelik dışı / fikir aşamasında
