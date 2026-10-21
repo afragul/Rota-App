@@ -11,6 +11,10 @@ dependencies = [
     "groq",
     "slowapi",
     "pyjwt[crypto]",
+    "sqlalchemy[asyncio]>=2",
+    "asyncpg",
+    "alembic",
+    "argon2-cffi",
 ]
 
 [project.optional-dependencies]
@@ -31,6 +35,8 @@ packages = ["app"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# Alembic'in ürettiği migration dosyaları elle biçimlendirilmez.
+extend-exclude = ["migrations/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

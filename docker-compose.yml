@@ -2,7 +2,7 @@
 # `docker compose up --build` backend'i de konteynerde çalıştırır.
 services:
   db:
-    image: postgres:17-alpine
+    image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-rota}
@@ -10,7 +10,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-rota}
     ports:
       # Yalnızca localhost'a açık: dışarıdan erişilemesin.
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
