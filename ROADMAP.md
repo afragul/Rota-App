@@ -250,9 +250,9 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   sessizce güncellenmiyor; misafir sayacı hâlâ bellek içi (aşağıdaki "bellek içi sayaçlar" maddesi).
 - [x] **Rate limit — giriş/kayıt**: auth artık backend'de; `/auth/register`
   `5/dakika`, `/auth/login` `10/dakika`, `/auth/refresh` `30/dakika`,
-  `/me/password` `5/dakika` (IP bazlı). Açık kalan: hesap bazlı kilitleme
-  (aynı e-postaya dağıtık denemeler IP limitini aşar) ve şifre sıfırlama
-  endpoint'i henüz yok. (Misafir kotası IP'ye bağlı:
+  `/me/password` `5/dakika`, `/auth/forgot` `5/dakika` (+ hesap başına 60 sn
+  bekleme), `/auth/reset` `10/dakika` (IP bazlı). Açık kalan: hesap bazlı
+  kilitleme (aynı e-postaya dağıtık denemeler IP limitini aşar). (Misafir kotası IP'ye bağlı:
   paylaşılan ağlarda kota paylaşılır, VPN ile aşılabilir — kabul edilen sınır;
   asıl koruma Google/Groq harcama limitleri.)
 - [x] **IDOR / sahiplik — `saved_plans` listelenebiliyordu (düzeltildi,
@@ -374,10 +374,10 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   göndermeden önce temiz bir klonda (`.env` yok) simüle edildi; bu sırada CI'ı ilk
   koşuda kırabilecek bir sorun bulundu: frontend araçları Node ≥ 20.19 ister, eski
   Node'da `npm ci` yerel bağlamaları sessizce atlıyor (workflow Node 22 kullanıyor,
-  `package.json`'a `engines` eklendi). **Açık:** workflow'un GitHub üzerindeki ilk
-  gerçek koşusu henüz görülmedi; `main` için "CI geçmeden merge edilemez" dal
-  koruması (branch protection) elle açılmalı; `pip-audit`/`npm audit` ve Dependabot
-  yok (aşağıdaki "Bağımlılık taraması" maddesi).
+  `package.json`'a `engines` eklendi). GitHub'daki ilk gerçek koşu geçti (PR #20).
+  **Açık:** `main` için "CI geçmeden merge edilemez" dal koruması (branch
+  protection) elle açılmalı, açıldığı teyit edilmedi; `pip-audit`/`npm audit` ve
+  Dependabot yok (aşağıdaki "Bağımlılık taraması" maddesi).
 - [ ] **Bağımlılık taraması (dependency scanning)**: bilinen güvenlik
   açıkları için düzenli ve otomatik tarama.
   - Frontend: `npm audit` (canlıya giden paketlerde `--omit=dev` ile 0 açık,
@@ -502,7 +502,8 @@ yazılmalı; yurt dışına aktarım şartları hukuken değerlendirilmeli.
 ## Milestone 5 — Supabase'ten kendi PostgreSQL'imize geçiş
 
 Gerekçe: kullanıcı verilerinin kendi sunucumuzda tutulması. Sıra: altyapı →
-modeller/migration → auth → veri endpoint'leri → frontend → refresh token.
+modeller/migration → auth → veri endpoint'leri → frontend → refresh token →
+hesap silme → günlük kota → migration otomasyonu → CI → şifre sıfırlama.
 Eski Supabase kullanıcıları taşınmadı (sıfırdan başlandı).
 
 **Yapıldı:**
@@ -512,9 +513,10 @@ Eski Supabase kullanıcıları taşınmadı (sıfırdan başlandı).
 - [x] **Veritabanı katmanı**: SQLAlchemy 2 (async) + asyncpg + Alembic
   (`app/db/`, `migrations/`). Tablolar: `users` (Supabase `auth.users` +
   `profiles` birleşti), `saved_plans`, `favorite_places`, `visited_places`,
-  `refresh_tokens`. Migration'lar: 0001 ilk şema, 0002 büyük/küçük harf duyarsız
-  benzersiz kullanıcı adı, 0003 refresh token. Testler bellekte SQLite ile
-  koşar (gerçek Postgres gerekmez).
+  `refresh_tokens`, `daily_usage`, `password_reset_tokens`. Migration'lar: 0001
+  ilk şema, 0002 büyük/küçük harf duyarsız benzersiz kullanıcı adı, 0003 refresh
+  token, 0004 günlük kullanım sayacı, 0005 şifre sıfırlama tokeni. Testler
+  bellekte SQLite ile koşar (gerçek Postgres gerekmez).
 - [x] **Kendi auth'umuz**: `/auth/register`, `/auth/login`, `/auth/refresh`,
   `/auth/logout`, `/me` (profil, kullanıcı adı), `/me/password`. Şifre argon2;
   erişim token'ı 15 dk'lık HS256 JWT; giriş hatası kullanıcının var olup
@@ -530,32 +532,44 @@ Eski Supabase kullanıcıları taşınmadı (sıfırdan başlandı).
   `auth.ts` kendi oturum deposu + sessiz yenileme; veri modülleri backend'i çağırır.
 - [x] **Sahiplik/IDOR**: Supabase RLS'in yerine her sorguda `WHERE user_id = :me`;
   başkasının kaynağı ile olmayan kaynak aynı 404'ü verir. Testlerle doğrulandı.
-
-**Açık:**
-- [x] **Şifre sıfırlama ("şifremi unuttum")**: `/auth/forgot`, `/auth/reset`,
-  `/auth/capabilities`; genel SMTP (stdlib `smtplib`, yeni bağımlılık yok), token
-  tek kullanımlık/1 saat/özet olarak saklanır ve bağlantıda fragment'te (`#reset=`),
-  hesap var/yok aynı cevap, e-posta arka planda, hesap başına 60 sn bekleme, sıfırlama
-  tüm oturumları kapatır (migration 0005). **SMTP yoksa özellik kapalı** ve arayüz
-  bağlantıyı göstermez. Gerçek bir SMTP konuşmasıyla (yerel sahte sunucu) uçtan uca
-  denendi; `starttls`/`ssl` modları yalnızca birim testle (gerçek sertifikalı sunucuyla
-  denenmedi). **Açık:** bir e-posta sağlayıcısı seçilip `.env`'ye SMTP bilgileri
-  yazılmalı (+ gönderen alan adı için SPF/DKIM, yoksa e-postalar spam'e düşer);
-  `FRONTEND_BASE_URL` yayında gerçek adres olmalı; sıfırlama sayfası tarayıcıda
-  elle denenmedi.
-- [x] **Hesap silme (frontend)**: `DELETE /me` ve Hesabım'daki "Hesabımı sil" akışı yapıldı.
-- Veri dışa aktarma bilinçli olarak yapılmıyor (karar: hiçbir şekilde).
-- [ ] **E-posta doğrulama**: yok; kayıt olan herkes e-postası doğrulanmadan
-  oturum açıyor. SMTP ile birlikte değerlendirilmeli.
-- [ ] **Hesap bazlı brute-force koruması**: yalnızca IP bazlı limit var.
-- [ ] **Tüm cihazlardan çıkış** düğmesi (backend `revoke_all_for_user` hazır).
-- [ ] **Frontend'in oturum mantığı tarayıcıda otomatik test edilmiyor**
-  (`auth.ts` zamanlayıcı/sekme senkronu elle denenmeli).
+- [x] **Hesap silme**: `DELETE /me` (şifre doğrulamalı, tek işlemde kalıcı) ve
+  Hesabım'da "Hesabımı sil" akışı. Ayrıntı: aşağıdaki KVKK "Silme hakkı" maddesi.
+- [x] **Günlük kota (giriş yapanlar)**: `daily_usage`, atomik sayaç; ayrıntı:
+  Milestone 4 "Rate limit — giriş yapanlar için günlük üst sınır" maddesi.
 - [x] **Migration'ın otomatik çalışması**: `docker-entrypoint.sh` açılışta
   `alembic upgrade head` uygular, başarısızsa konteyner hatayla çıkar. Boş
   veritabanı, ikinci açılış, bozuk bağlantı ve `RUN_MIGRATIONS=false` denendi.
-  Açık: migration'dan önce yedek alma ve geri alma (downgrade) prosedürü yok.
+- [x] **CI**: GitHub Actions; ayrıntı: Milestone 4 "CI" maddesi.
+- [x] **Şifre sıfırlama ("şifremi unuttum")**: `/auth/forgot`, `/auth/reset`,
+  `/auth/capabilities`; genel SMTP (stdlib `smtplib`, yeni bağımlılık yok: TLS için
+  `certifi`), token tek kullanımlık/1 saat/özet olarak saklanır ve bağlantıda
+  fragment'te (`#reset=`), hesap var/yok aynı cevap, e-posta arka planda, hesap
+  başına 60 sn bekleme, sıfırlama tüm oturumları kapatır. **SMTP yoksa özellik
+  kapalı** ve arayüz bağlantıyı göstermez. Doğrulama: yerel sahte SMTP sunucusuyla
+  uçtan uca; gerçek sağlayıcı (Resend, `ssl`/465) sunucusuna bağlanıp kimlik
+  doğrulama başarılı (e-posta gönderimi bu aşamada yapılmadı).
+  Çıkan sorunlar: python.org macOS Python'unda kök sertifika deposu olmadığı için
+  `smtplib` "unable to get local issuer certificate" ile düşüyordu (artık certifi);
+  ayrıca bir test `.env`'deki gerçek SMTP ayarını görüp gerçek sağlayıcıya bağlanmayı
+  denemişti (artık `conftest` SMTP_* değerlerini boşa zorluyor).
+
+**Açık:**
+- [ ] **Gerçek e-posta alan adı**: Resend deneme modu yalnızca hesabın kendi
+  adresine gönderir; başkalarına göndermek için alan adı doğrulanmalı (SPF/DKIM) ve
+  `SMTP_FROM` o alan adından olmalı. `FRONTEND_BASE_URL` yayında gerçek adres olmalı.
+- [ ] **Şifre sıfırlama arayüzü ve `starttls` modu**: forgot/reset formları tarayıcıda
+  elle denenmedi; `starttls` yalnızca birim testle (gerçek sunucuyla denenmedi).
+- [ ] **E-posta doğrulama**: yok; kayıt olan herkes e-postası doğrulanmadan
+  oturum açıyor (başkasının adresiyle de hesap açılabilir).
+- [ ] **Güvenlik bildirimi e-postaları**: şifre değişince/sıfırlanınca/hesap
+  silinince bilgilendirme e-postası gitmiyor (karar: şimdilik gerek yok).
+- [ ] **Hesap bazlı brute-force koruması**: yalnızca IP bazlı limit var.
+- [ ] **Tüm cihazlardan çıkış** düğmesi (backend `revoke_all_for_user` hazır).
+- [ ] **Frontend'in oturum mantığı tarayıcıda otomatik test edilmiyor**
+  (`auth.ts` zamanlayıcı/sekme senkronu, hesap silme/şifre sıfırlama formları elle denenmeli).
+- [ ] **Migration öncesi yedek ve geri alma (downgrade) prosedürü** yok.
 - [ ] **Eski Supabase verisi**: gerçek kullanıcı varsa taşıma yapılmadı.
+- Veri dışa aktarma bilinçli olarak yapılmıyor (karar: hiçbir şekilde).
 
 ## Öncelik dışı / fikir aşamasında
 

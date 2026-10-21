@@ -285,7 +285,13 @@ fans out to several paid Google calls plus a Groq call per request:
   `smtp_from` unset the feature is **off** (`/auth/forgot` → 503,
   `/auth/capabilities` → `password_reset: false`, and the UI hides the link).
   Failures are swallowed and logged by exception *type* only — never the
-  address or message, since the message holds the reset link. Add any new
+  address or message, since the message holds the reset link. TLS uses
+  `certifi`'s CA bundle (`email.py::_ssl_context`), not Python's default: a
+  python.org macOS Python ships with *no* root certificates, so the default
+  context fails every SMTP connection with "unable to get local issuer
+  certificate" while httpx (which uses certifi) works fine on the same machine.
+  `tests/conftest.py` forces `SMTP_*` blank so tests never see your real `.env`
+  credentials (one test once tried to reach the real provider). Add any new
   user-keyed table to `services/users.py::delete_account`.
 - **Migrations are the schema's source of truth** (`migrations/`, generated
   from `app/db/models.py`); `supabase/` no longer exists. Don't edit an applied
@@ -341,8 +347,13 @@ and report changes back up via callbacks (e.g. `DetailScreen`'s
   becomes visible, and on a `401`; across tabs it uses Web Locks plus the
   `storage` event. Only a `401` from `/auth/refresh` ends the session — network
   or `5xx` errors keep it and retry. `signIn`/`signUp`/`signOut`/
-  `updateUsername`/`changePassword`/`deleteAccount` are plain exported functions
-  that update the store; there is no password-reset flow yet (needs SMTP). The frontend's
+  `updateUsername`/`changePassword`/`deleteAccount`/`requestPasswordReset`/
+  `resetPassword` are plain exported functions that update the store. The
+  password-reset link (`/#reset=<token>`) is read once by
+  `App.tsx::readResetToken` (pure, StrictMode-safe), the token is stripped from
+  the address bar in an effect, and `AccountScreen` shows the new-password form
+  before anything else; "Şifremi unuttum" only renders if
+  `fetchAuthCapabilities()` says the server has SMTP configured. The frontend's
   own `guestLimit.ts` (a `localStorage` counter) is just UX: it shows the
   "limit reached" screen before even making a request. The backend enforces
   the real cap server-side (see "Security" above) and learns the user's
