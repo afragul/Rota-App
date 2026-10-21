@@ -1,8 +1,4 @@
-<<<<<<< feat/toggle_db
-from fastapi import APIRouter, HTTPException, Request, status
-=======
 from fastapi import APIRouter, Depends, Request
->>>>>>> local
 
 from app.core.auth import get_optional_user_id
 from app.core.guest_limit import enforce_guest_legs_limit
