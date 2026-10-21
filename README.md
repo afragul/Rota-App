@@ -118,7 +118,10 @@ alembic upgrade head           # tabloları oluşturur / günceller
 Şema `migrations/` altındaki Alembic migration'larıdır (kaynak: `app/db/models.py`).
 Model değiştirince `alembic revision --autogenerate -m "açıklama"` ile yeni migration
 üret, içine bak, sonra `alembic upgrade head`. Backend'i de konteynerde çalıştırmak için
-`docker compose up --build` (yeni bir ortamda önce `docker compose run --rm api alembic upgrade head`).
+`docker compose up --build`: `api` konteyneri açılışta `alembic upgrade head`'i kendisi
+çalıştırır (`docker-entrypoint.sh`); migration başarısız olursa konteyner hatayla çıkar.
+Birden çok `api` kopyası çalıştıracaksan migration'ı ayrı bir adım olarak çalıştırıp
+kopyalarda `RUN_MIGRATIONS=false` ver (iki kopya aynı anda migration çalıştırmamalı).
 Testler bellekte SQLite kullanır, Postgres gerekmez.
 
 ## Çalıştırma
