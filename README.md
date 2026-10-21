@@ -166,7 +166,7 @@ pytest
 | `POST` | `/route/legs` | Verilen durak listesi (sıra + koordinat) için ardışık ayakları yeniden hesaplar — durak silindiğinde/sırası değiştiğinde kullanılır |
 | `POST` | `/auth/register`, `/auth/login` | Hesap açar / giriş yapar; erişim token'ı döner, refresh token `httpOnly` çereze yazılır |
 | `POST` | `/auth/refresh`, `/auth/logout` | Çerezdeki refresh token'la yeni erişim token'ı alır (token döner) / oturumu kapatır ve token'ı iptal eder |
-| `GET`, `PATCH` | `/me` | Profil / kullanıcı adını değiştir (giriş gerekir) |
+| `GET`, `PATCH`, `DELETE` | `/me` | Profil / kullanıcı adını değiştir / hesabı ve tüm veriyi kalıcı sil (giriş gerekir; silmede gövdede `{"password": ...}` istenir) |
 | `POST` | `/me/password` | Mevcut şifreyi doğrulayıp yenisini belirler; diğer cihazlardaki oturumlar kapanır |
 | `POST`, `GET`, `DELETE` | `/plans`, `/plans/{id}` | Planı kaydet / kayıtlı planları listele / sil (giriş gerekir, yalnızca kendi planların) |
 | `GET` | `/shared/{id}` | Paylaşım linkiyle planı aç (girişsiz; sahibin kimliği dönmez, yalnızca `is_owner`) |
