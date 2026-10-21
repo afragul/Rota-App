@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -78,6 +79,23 @@ class Settings(BaseSettings):
     # Gün, Türkiye saatine göre (UTC+3) başlar/biter. Sayaç veritabanında tutulur.
     user_daily_plan_limit: int = 30
     user_daily_legs_limit: int = 300
+
+    # --- E-posta (şifre sıfırlama) ---
+    # Genel SMTP: Gmail (uygulama şifresi), Resend, SendGrid, Mailgun... hangi sağlayıcı olursa.
+    # smtp_host ya da smtp_from boşsa özellik KAPALI: /auth/forgot 503 verir, frontend
+    # "şifremi unuttum" bağlantısını göstermez (hiç gelmeyecek bir e-posta vaat etmez).
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_from: str | None = None
+    # "starttls" (587), "ssl" (465, baştan şifreli) ya da "none" (yalnızca yerel test).
+    smtp_security: Literal["starttls", "ssl", "none"] = "starttls"
+    # Şifre sıfırlama bağlantısındaki adres (e-postadaki link bununla başlar).
+    frontend_base_url: str = "http://localhost:5173"
+    password_reset_expire_minutes: int = 60
+    # Aynı hesap için iki sıfırlama e-postası arasındaki en kısa süre (e-posta bombardımanı).
+    password_reset_cooldown_seconds: int = 60
 
     # Kullanıcı başına favori / ziyaret edilen farklı mekan sayısı üst sınırları.
     max_favorites_per_user: int = 200

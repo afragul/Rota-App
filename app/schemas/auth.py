@@ -49,3 +49,20 @@ class TokenResponse(BaseModel):
 
 class DeleteAccountRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr = Field(max_length=254)
+
+
+class ResetPasswordRequest(BaseModel):
+    # Token urlsafe base64 (~43 karakter); üst sınır aşırı büyük girdiyi keser.
+    token: str = Field(min_length=10, max_length=200)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class AuthCapabilities(BaseModel):
+    """Frontend'in hangi özellikleri göstereceğini bilmesi için (örn. SMTP yoksa
+    "şifremi unuttum" gizlenir)."""
+
+    password_reset: bool

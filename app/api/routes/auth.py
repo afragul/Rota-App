@@ -1,6 +1,15 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Cookie,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,8 +18,17 @@ from app.core.rate_limit import limiter
 from app.core.security import create_access_token
 from app.db.models import User
 from app.db.session import get_session
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserOut
-from app.services import refresh_tokens
+from app.schemas.auth import (
+    AuthCapabilities,
+    ForgotPasswordRequest,
+    LoginRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    TokenResponse,
+    UserOut,
+)
+from app.services import email as email_service
+from app.services import password_reset, refresh_tokens
 from app.services.users import (
     EmailAlreadyRegisteredError,
     InvalidCredentialsError,
@@ -111,6 +129,54 @@ async def logout(
     """Oturumu kapatır: refresh token ailesi iptal edilir, cookie silinir."""
     if refresh_token is not None:
         await refresh_tokens.revoke_token(session, refresh_token)
+    out = Response(status_code=status.HTTP_204_NO_CONTENT)
+    clear_refresh_cookie(out)
+    return out
+
+
+@router.get("/capabilities", response_model=AuthCapabilities)
+async def capabilities() -> AuthCapabilities:
+    """Sunucuda hangi hesap özellikleri açık (SMTP yoksa şifre sıfırlama kapalı)."""
+    return AuthCapabilities(password_reset=email_service.is_configured())
+
+
+@router.post("/forgot", status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("5/minute")
+async def forgot_password(
+    request: Request,
+    payload: ForgotPasswordRequest,
+    background: BackgroundTasks,
+    session: Session,
+) -> dict[str, str]:
+    """Şifre sıfırlama bağlantısı gönderir. Hesap var olsun olmasın AYNI cevabı döner
+    (hesap var mı bilgisi sızmasın); e-posta arka planda gönderilir, böylece gönderme
+    süresi de yanıt süresinden anlaşılamaz."""
+    if not email_service.is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Şifre sıfırlama bu sunucuda henüz yapılandırılmamış",
+        )
+    created = await password_reset.create_token(session, payload.email)
+    if created is not None:
+        address, raw_token = created
+        subject, body = password_reset.build_email(raw_token)
+        background.add_task(email_service.send_email_quietly, address, subject, body)
+    return {"detail": "Bu e-posta kayıtlıysa şifre sıfırlama bağlantısı gönderildi"}
+
+
+@router.post("/reset", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/minute")
+async def reset_password(
+    request: Request, payload: ResetPasswordRequest, session: Session
+) -> Response:
+    """E-postadaki bağlantıdaki token'la yeni şifre belirler; tüm oturumlar kapanır."""
+    try:
+        await password_reset.reset_password(session, payload.token, payload.new_password)
+    except password_reset.InvalidResetTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bağlantı geçersiz ya da süresi dolmuş. Yeni bir bağlantı iste.",
+        ) from None
     out = Response(status_code=status.HTTP_204_NO_CONTENT)
     clear_refresh_cookie(out)
     return out
