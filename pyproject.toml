@@ -15,6 +15,7 @@ dependencies = [
     "asyncpg",
     "alembic",
     "argon2-cffi",
+    "certifi",
 ]
 
 [project.optional-dependencies]

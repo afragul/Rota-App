@@ -13,6 +13,13 @@ os.environ.setdefault("JWT_SECRET", "test-jwt-secret-en-az-32-karakter-uzunlugun
 # guest akışlarının session bağımlılığı çözülürken engine kurabilmesi için.)
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
 
+# Testler .env'deki GERÇEK SMTP ayarlarını asla görmemeli: aksi halde "SMTP yok" varsayan bir
+# test gerçek sağlayıcıya bağlanıp e-posta göndermeyi dener (bir kez denedi: Resend reddetti).
+# Burada setdefault DEĞİL, doğrudan atama: ortamda gerçek bir SMTP_* tanımlıysa da ezilir.
+# SMTP'nin açık olması gereken testler ayarı kendileri monkeypatch eder.
+for _name in ("SMTP_HOST", "SMTP_FROM", "SMTP_USERNAME", "SMTP_PASSWORD"):
+    os.environ[_name] = ""
+
 # Testlerde cookie http://test üzerinden ve "/" yoluyla gider (prod: Secure, /api/auth).
 os.environ.setdefault("COOKIE_SECURE", "false")
 os.environ.setdefault("REFRESH_COOKIE_PATH", "/")
