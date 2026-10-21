@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, createPlan, type LatLng } from './api'
-import { useSession } from './auth'
+import { useAuthLoading, useSession } from './auth'
 import { ErrorBanner } from './components/ErrorBanner'
 import { Shell, type NavKey } from './components/Shell'
 import { guestLimitReached, recordGuestPlan } from './guestLimit'
@@ -74,6 +74,7 @@ export default function App() {
   const abort = useRef<AbortController | null>(null)
   const [theme, toggleTheme] = useTheme()
   const session = useSession()
+  const authLoading = useAuthLoading()
   const [sharedId, setSharedId] = useState(() => new URLSearchParams(window.location.search).get('shared'))
   // Kaydedilenler listesinden bir rota görüntülenip (silinip) dönüldüğünde Hesabım'ı yeniden yükletir.
   const [accountKey, setAccountKey] = useState(0)
@@ -96,8 +97,8 @@ export default function App() {
     async (clarification?: { question: string; answer: string }) => {
       const base = toRequest(prefs)
       if (!base) return
-      // Misafir hakkı dolduysa istek hiç atılmaz.
-      if (!session && guestLimitReached()) return setView({ name: 'limit' })
+      // Misafir hakkı dolduysa istek hiç atılmaz; oturum henüz geri kazanılıyorsa engellenmez.
+      if (!authLoading && !session && guestLimitReached()) return setView({ name: 'limit' })
       // Backend stateless: soru ve cevap istekle birlikte geri gönderilir.
       const request = clarification
         ? { ...base, previous_question: clarification.question, clarification_answer: clarification.answer }
@@ -124,7 +125,7 @@ export default function App() {
         setView({ name: 'error', error: err instanceof ApiError ? err : new ApiError(0, 'Beklenmeyen hata') })
       }
     },
-    [prefs, session],
+    [prefs, session, authLoading],
   )
 
   const toPrefs = () => {
