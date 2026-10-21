@@ -65,19 +65,36 @@ const NAV_FOR: Record<View['name'], NavKey | null> = {
   account: null,
 }
 
+// Şifre sıfırlama e-postasındaki bağlantı `/#reset=<token>` biçimindedir: token fragment'te
+// olduğu için sunucuya ve Referer başlığına gitmez. Okuma saf kalır (StrictMode state
+// başlatıcılarını iki kez çalıştırır); adres çubuğundan silme App içindeki effect'te yapılır.
+function readResetToken(): string | null {
+  const match = /^#reset=(.+)$/.exec(window.location.hash)
+  return match ? decodeURIComponent(match[1]) : null
+}
+
 export default function App() {
   // Tercihler ve son plan ekranlar arasında korunur.
   const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFS)
   const [plan, setPlan] = useState<DayPlan | null>(null)
-  const [view, setView] = useState<View>({ name: 'location' })
+  // Sıfırlama bağlantısıyla gelindiyse doğrudan hesap ekranında başla (yeni şifre formu orada).
+  const [view, setView] = useState<View>(() =>
+    readResetToken() ? { name: 'account', from: { name: 'location' } } : { name: 'location' },
+  )
   const [userLoc, setUserLoc] = useState<UserLocation>({ status: 'idle' })
   const abort = useRef<AbortController | null>(null)
   const [theme, toggleTheme] = useTheme()
   const session = useSession()
   const authLoading = useAuthLoading()
   const [sharedId, setSharedId] = useState(() => new URLSearchParams(window.location.search).get('shared'))
+  const [resetToken, setResetToken] = useState<string | null>(readResetToken)
   // Kaydedilenler listesinden bir rota görüntülenip (silinip) dönüldüğünde Hesabım'ı yeniden yükletir.
   const [accountKey, setAccountKey] = useState(0)
+
+  // Token artık state'te; adres çubuğundan/geçmişten sil (ekran görüntüsü, geçmiş, paylaşım).
+  useEffect(() => {
+    if (resetToken) window.history.replaceState(null, '', window.location.pathname + window.location.search)
+  }, [resetToken])
 
   // Kullanıcının konumu yalnızca plan detayında, ilk durağa rota için istenir.
   const requestLocation = useCallback(() => {
@@ -246,7 +263,13 @@ export default function App() {
         />
       )}
       {view.name === 'account' && (
-        <AccountScreen key={accountKey} session={session} onOpenSaved={setSharedId} />
+        <AccountScreen
+          key={accountKey}
+          session={session}
+          onOpenSaved={setSharedId}
+          resetToken={resetToken}
+          onResetDone={() => setResetToken(null)}
+        />
       )}
     </Shell>
   )

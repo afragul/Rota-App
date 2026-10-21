@@ -168,6 +168,30 @@ export async function changePassword(currentPassword: string, newPassword: strin
   })
 }
 
+// Şifre sıfırlama bağlantısı iste. Backend hesap var olsun olmasın aynı cevabı verir
+// (hesap var mı bilgisi sızmasın); bu yüzden dönüş değeri yok, başarı = "istek alındı".
+export async function requestPasswordReset(email: string) {
+  await apiRequest<unknown>('/auth/forgot', { method: 'POST', body: { email } })
+}
+
+// E-postadaki token'la yeni şifre belirler. Backend tüm oturumları kapatır ve çerezi
+// siler; bu tarayıcıdaki yerel oturum da (varsa) kapatılır, kullanıcı yeni şifreyle girer.
+export async function resetPassword(token: string, newPassword: string) {
+  await apiRequest<void>('/auth/reset', { method: 'POST', body: { token, new_password: newPassword } })
+  setSession(null)
+}
+
+// Sunucuda hangi hesap özellikleri açık. Şifre sıfırlama e-posta (SMTP) gerektirir; kapalıysa
+// arayüz "şifremi unuttum" bağlantısını GÖSTERMEZ (hiç gelmeyecek bir e-posta vaat etmez).
+// Ulaşılamazsa kapalı varsayılır.
+export async function fetchAuthCapabilities(): Promise<{ password_reset: boolean }> {
+  try {
+    return await apiRequest<{ password_reset: boolean }>('/auth/capabilities')
+  } catch {
+    return { password_reset: false }
+  }
+}
+
 // Token'la 401 alındı (erişim token'ı beklenenden önce geçersiz oldu): yenilemeyi dene;
 // o da reddedilirse refreshSession yerel oturumu kapatır.
 setUnauthorizedHandler(() => void refreshSession())

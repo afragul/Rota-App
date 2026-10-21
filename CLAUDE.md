@@ -272,6 +272,21 @@ fans out to several paid Google calls plus a Groq call per request:
   (`refresh_cookie_path`, default `/api/auth`) must equal what the browser
   sees; if the `/api` prefix changes, the cookie silently stops being sent.
   Browser cookie `Secure` requires HTTPS in production (`cookie_secure=true`).
+- **Password reset** ([app/services/password_reset.py](app/services/password_reset.py),
+  [app/services/email.py](app/services/email.py)): `POST /auth/forgot` always
+  answers the same `202` whether or not the email has an account (no
+  enumeration) and sends the mail in a background task so timing doesn't leak
+  either; a per-account cooldown (`password_reset_cooldown_seconds`) stops mail
+  bombing. The token is single-use, 1 hour, stored only as SHA-256, and sits in
+  the link's **fragment** (`/#reset=...`) so it never reaches server logs or
+  `Referer`; the frontend (`App.tsx::readResetToken`) reads it and strips it from
+  the address bar. A successful reset revokes every session. Email is plain
+  stdlib `smtplib` (no dependency) against any SMTP provider; with `smtp_host`/
+  `smtp_from` unset the feature is **off** (`/auth/forgot` → 503,
+  `/auth/capabilities` → `password_reset: false`, and the UI hides the link).
+  Failures are swallowed and logged by exception *type* only — never the
+  address or message, since the message holds the reset link. Add any new
+  user-keyed table to `services/users.py::delete_account`.
 - **Migrations are the schema's source of truth** (`migrations/`, generated
   from `app/db/models.py`); `supabase/` no longer exists. Don't edit an applied
   migration — add a new one.
