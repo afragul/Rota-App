@@ -1,4 +1,4 @@
-import type { Session } from '@supabase/supabase-js'
+import type { Session } from '../auth'
 import { useEffect, useState } from 'react'
 import { fetchApproach, fetchLegs, type LatLng } from '../api'
 import { Icon } from '../components/Icon'
@@ -339,7 +339,7 @@ export function DetailScreen({
   // Mekan bazlı favoriler (rota değil) — oturum değişince yeniden yüklenir.
   useEffect(() => {
     if (!session) return setFavoritePlaces([])
-    listFavoritePlaces(session.user.id).then(({ data }) => setFavoritePlaces(data ?? []))
+    listFavoritePlaces(session.access_token).then(({ data }) => setFavoritePlaces(data ?? []))
   }, [session])
 
   const isFavoritePlace = (placeId: string) => favoritePlaces.some((p) => p.place_id === placeId)
@@ -351,11 +351,11 @@ export function DetailScreen({
     if (!session) return onRequireAccount()
     if (isFavoritePlace(stop.place_id)) {
       setFavoritePlaces((prev) => prev.filter((p) => p.place_id !== stop.place_id))
-      await removeFavoritePlace(session.user.id, stop.place_id)
+      await removeFavoritePlace(stop.place_id, session.access_token)
     } else {
       const place = placeFromStop(stop, plan.place_pool ?? [])
       setFavoritePlaces((prev) => [...prev, place])
-      await addFavoritePlace(place, session.user.id)
+      await addFavoritePlace(place, session.access_token)
     }
   }
 
@@ -440,12 +440,12 @@ export function DetailScreen({
     if (!session) return onRequireAccount()
     setFavorite('saving')
     if (savedId) {
-      await deleteSavedPlan(savedId)
+      await deleteSavedPlan(savedId, session.access_token)
       setSavedId(null)
       setFavorite('idle')
       return
     }
-    const { data, error } = await saveFavoritePlan(alt, session.user.id)
+    const { data, error } = await saveFavoritePlan(alt, session.access_token)
     if (error || !data) {
       setFavorite('error')
       setTimeout(() => setFavorite('idle'), 2000)
@@ -490,7 +490,7 @@ export function DetailScreen({
       const next = new Set(prev)
       if (next.delete(stop.order)) return next
       next.add(stop.order)
-      if (session) void recordVisit(placeFromStop(stop, plan.place_pool ?? []), session.user.id)
+      if (session) void recordVisit(placeFromStop(stop, plan.place_pool ?? []), session.access_token)
       return next
     })
 

@@ -1,0 +1,9 @@
+.venv
+.env
+.git
+.claude
+.idea
+__pycache__
+frontend
+docs
+tests

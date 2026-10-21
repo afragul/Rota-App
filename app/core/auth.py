@@ -1,33 +1,32 @@
-import jwt
-from fastapi import Header
+import uuid
 
-from app.core.config import get_settings
+from fastapi import Depends, Header, HTTPException, status
+
+from app.core.security import decode_access_token
 
 
 async def get_optional_user_id(authorization: str | None = Header(default=None)) -> str | None:
-    """Supabase JWT'si geçerliyse kullanıcı id'sini (sub) döndürür; yoksa/
-    geçersizse None (misafir sayılır).
+    """Geçerli bir erişim token'ı (JWT) varsa kullanıcı id'sini (sub) döndürür;
+    yoksa/geçersizse/süresi dolmuşsa None (misafir sayılır).
 
     Backend için kimlik doğrulama hiçbir endpoint'te zorunlu değil — bu
-    sadece misafir plan kotasını (bkz. guest_limit.py) atlamak için "giriş
-    yapmış mı" sorusuna cevap verir.
-
-    SUPABASE_JWT_SECRET iki farklı şey olabilir (Supabase projesi hangisini
-    kullanıyorsa): eski/legacy simetrik "JWT Secret" (düz metin, HS256) ya
-    da yeni asimetrik "Signing Keys" özelliğinin PEM formatlı genel anahtarı
-    ("-----BEGIN PUBLIC KEY-----" ile başlar, ES256/RS256). Hangisi olduğu
-    bu önekten otomatik anlaşılır; kullanıcı ikisinden hangisini kopyaladığını
-    bilmek zorunda kalmaz.
+    sadece misafir kotalarını (bkz. guest_limit.py) atlamak için "giriş
+    yapmış mı" sorusuna cevap verir. Asla hata fırlatmaz.
     """
-    settings = get_settings()
-    secret = settings.supabase_jwt_secret
-    if not secret or not authorization or not authorization.startswith("Bearer "):
+    if not authorization or not authorization.startswith("Bearer "):
         return None
-    token = authorization.removeprefix("Bearer ")
-    key = secret.get_secret_value()
-    algorithms = ["ES256", "RS256"] if key.strip().startswith("-----BEGIN") else ["HS256"]
-    try:
-        payload = jwt.decode(token, key, algorithms=algorithms, audience="authenticated")
-    except jwt.PyJWTError:
-        return None
-    return payload.get("sub")
+    return decode_access_token(authorization.removeprefix("Bearer "))
+
+
+async def require_user_id(user_id: str | None = Depends(get_optional_user_id)) -> uuid.UUID:
+    """Giriş zorunlu endpoint'ler için: geçerli token yoksa 401."""
+    if user_id is not None:
+        try:
+            return uuid.UUID(user_id)
+        except ValueError:
+            pass
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Bu işlem için giriş yapmalısınız",
+        headers={"WWW-Authenticate": "Bearer"},
+    )

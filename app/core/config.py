@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,18 +50,49 @@ class Settings(BaseSettings):
     # olduğu için guest_daily_plan_limit'ten kasıtlı olarak daha yüksek.
     guest_daily_legs_limit: int = 20
 
-    # Supabase JWT'sini doğrulamak için: Supabase Dashboard → Project Settings
-    # → API → JWT Settings. İki türden biri olabilir, hangisi varsa o kopyalanır:
-    # eski/legacy "JWT Secret" (düz metin, HS256) ya da yeni "Signing Keys"
-    # özelliğinin PEM formatlı genel anahtarı ("-----BEGIN PUBLIC KEY-----" ile
-    # başlar, ES256/RS256) — app/core/auth.py bu önekten otomatik ayırt eder.
-    # Ayarlanmazsa her istek misafir sayılır; backend auth'tan habersiz kalır.
-    supabase_jwt_secret: SecretStr | None = None
+    # Kendi ürettiğimiz erişim token'larını (JWT, HS256) imzalamak için gizli anahtar.
+    # Varsayılanı yok: eksikse uygulama açılışta patlar. En az 32 karakter,
+    # rastgele olmalı (ör. `openssl rand -hex 32`); sızarsa herkes herhangi
+    # bir kullanıcı adına token üretebilir.
+    jwt_secret: SecretStr
+
+    jwt_expire_minutes: int = 15
+
+    # Refresh token (httpOnly cookie, veritabanında hash'li) ömrü ve cookie ayarları.
+    # Erişim token'ı kısa ömürlü, oturumu refresh token sürdürür.
+    refresh_token_expire_days: int = 30
+    # Cookie yalnızca HTTPS üzerinden gider; yerel http geliştirmede COOKIE_SECURE=false.
+    cookie_secure: bool = True
+    # Cookie'nin yolu, tarayıcının gördüğü adresle eşleşmeli: frontend API'ye /api
+    # önekiyle gidiyor (bkz. vite.config.ts proxy), yani /api/auth/*.
+    refresh_cookie_path: str = "/api/auth"
+    # Aynı refresh token'ın bu süre içindeki ikinci kullanımı "çalıntı" sayılmaz
+    # (iki sekmenin aynı anda yenilemesi); süre dışı tekrar kullanım tüm zinciri kapatır.
+    refresh_reuse_grace_seconds: int = 10
+
+    # Bir kullanıcının kaydedebileceği en fazla plan sayısı (depolama şişmesin).
+    max_saved_plans_per_user: int = 100
+
+    # Kullanıcı başına favori / ziyaret edilen farklı mekan sayısı üst sınırları.
+    max_favorites_per_user: int = 200
+    max_visited_places_per_user: int = 500
+
+    # --- Veritabanı ---
+    # PostgreSQL bağlantı adresi (asyncpg sürücüsü). Hesap/favori verisi
+    # Supabase'ten buraya taşınırken kullanılacak; şimdilik opsiyonel.
+    database_url: SecretStr | None = None
 
     # Virgülle ayrılmış izinli CORS origin listesi (prod'da frontend'in
     # gerçek adresiyle değiştirilir). Dev'de Vite proxy sunucu-sunucu
     # çalıştığı için bu ayar devreye girmez.
     cors_origins: str = "http://localhost:5173"
+
+    @field_validator("jwt_secret")
+    @classmethod
+    def _jwt_secret_yeterince_uzun(cls, value: SecretStr) -> SecretStr:
+        if len(value.get_secret_value()) < 32:
+            raise ValueError("JWT_SECRET en az 32 karakter olmalı")
+        return value
 
 
 @lru_cache

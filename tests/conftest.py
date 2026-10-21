@@ -6,6 +6,12 @@ import os
 for _name in ("PLACES_API_KEY", "GEOCODING_API_KEY", "ROUTES_API_KEY", "GROQ_API_KEY"):
     os.environ.setdefault(_name, f"test-{_name.lower()}")
 
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret-en-az-32-karakter-uzunlugunda")
+
+# Testlerde cookie http://test üzerinden ve "/" yoluyla gider (prod: Secure, /api/auth).
+os.environ.setdefault("COOKIE_SECURE", "false")
+os.environ.setdefault("REFRESH_COOKIE_PATH", "/")
+
 # Testler, aynı app singleton'ını (TestClient) tekrar tekrar çağırabilir;
 # IP bazlı rate limiting testlerde kapalı olmalı, aksi halde test sayısı
 # arttıkça flaky 429'lar görülebilir (bkz. app/core/rate_limit.py).
@@ -47,3 +53,34 @@ def fake_groq(monkeypatch):
         return fake
 
     return install
+
+
+@pytest.fixture
+async def client():
+    """Bellekte SQLite ile çalışan HTTP istemcisi; gerçek Postgres gerekmez."""
+    import httpx
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import StaticPool
+
+    from app.db.base import Base
+    from app.db.session import get_session
+    from app.main import app
+
+    engine = create_async_engine(
+        "sqlite+aiosqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def _session():
+        async with factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = _session
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+        c.session_factory = factory
+        yield c
+    app.dependency_overrides.clear()
+    await engine.dispose()

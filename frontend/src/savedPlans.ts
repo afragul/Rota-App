@@ -1,9 +1,8 @@
-import { supabase } from './supabase'
+import { apiRequest, settle } from './api'
 import type { PlanAlternative } from './types'
 
 export interface SavedPlan {
   id: string
-  user_id: string
   theme: string
   title: string
   summary: string
@@ -11,43 +10,42 @@ export interface SavedPlan {
   legs: PlanAlternative['legs']
   routes_available: boolean
   created_at: string
+  /** Paylaşım linkini açan kişi planın sahibi mi (sahibin kimliği dönmez). */
+  is_owner: boolean
 }
+
+export type SavedPlanSummary = Pick<SavedPlan, 'id' | 'theme' | 'title' | 'summary' | 'created_at'>
 
 export function shareUrl(id: string): string {
   return `${window.location.origin}${window.location.pathname}?shared=${id}`
 }
 
-export function saveFavoritePlan(alt: PlanAlternative, userId: string) {
-  return supabase
-    .from('saved_plans')
-    .insert({
-      user_id: userId,
-      theme: alt.theme,
-      title: alt.title,
-      summary: alt.summary,
-      stops: alt.stops,
-      legs: alt.legs,
-      routes_available: alt.routes_available,
-    })
-    .select('id')
-    .single()
+export function saveFavoritePlan(alt: PlanAlternative, token: string) {
+  return settle(
+    apiRequest<{ id: string }>('/plans', {
+      method: 'POST',
+      token,
+      body: {
+        theme: alt.theme,
+        title: alt.title,
+        summary: alt.summary,
+        stops: alt.stops,
+        legs: alt.legs,
+        routes_available: alt.routes_available,
+      },
+    }),
+  )
 }
 
-export function listSavedPlans(userId: string) {
-  return supabase
-    .from('saved_plans')
-    .select('id, theme, title, summary, created_at')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
+export function listSavedPlans(token: string) {
+  return settle(apiRequest<SavedPlanSummary[]>('/plans', { token }))
 }
 
-export function deleteSavedPlan(id: string) {
-  return supabase.from('saved_plans').delete().eq('id', id)
+export function deleteSavedPlan(id: string, token: string) {
+  return settle(apiRequest<void>(`/plans/${id}`, { method: 'DELETE', token }))
 }
 
-// saved_plans artık select'te RLS'i sahibine kapatıyor (bkz. supabase/schema.sql);
-// paylaşım linki bu yüzden ham select değil, tek bir id'ye sabitlenmiş
-// SECURITY DEFINER bir Postgres fonksiyonu (get_shared_plan) üzerinden okur.
-export function fetchSharedPlan(id: string) {
-  return supabase.rpc('get_shared_plan', { plan_id: id }).single<SavedPlan>()
+// Paylaşım linki girişsiz de açılır; token verilirse backend `is_owner`'ı doldurur.
+export function fetchSharedPlan(id: string, token?: string) {
+  return settle(apiRequest<SavedPlan>(`/shared/${id}`, { token }))
 }

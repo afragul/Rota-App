@@ -13,11 +13,13 @@ Code comments, docstrings, and log messages are written in Turkish; keep new
 ones consistent with that convention unless told otherwise.
 
 The repo also has a `frontend/` app (Vite + React + TypeScript + Tailwind +
-Leaflet) that consumes this API — see "Frontend" below. Auth is Supabase,
-and the backend only optionally knows about it: no endpoint *requires* a
-user identity, but `/plan` will verify a Supabase JWT if one is sent, purely
-to tell a logged-in user apart from a guest for rate-limiting purposes (see
-"Security" below).
+Leaflet) that consumes this API — see "Frontend" below. Accounts live in the
+backend's own PostgreSQL database (SQLAlchemy + Alembic; Supabase was removed).
+Login is optional: the planning endpoints (`/plan`, `/route/*`, ...) never
+*require* a user, but `/plan` and `/route/legs` verify the backend's own JWT if
+one is sent, purely to tell a logged-in user apart from a guest for rate-limiting
+purposes. Only the account/data endpoints (`/me`, `/plans`, `/favorites`,
+`/visits`) require login (see "Security" below and "Database" under Commands).
 
 ## Commands
 
@@ -64,11 +66,23 @@ npm run build    # tsc -b && vite build
 npm run lint      # oxlint
 npx tsc -b --noEmit   # type-check without emitting
 ```
-There is no frontend test suite. `frontend/.env` needs `VITE_SUPABASE_URL` /
-`VITE_SUPABASE_ANON_KEY` (copy `frontend/.env.example`) for the Supabase Auth
-feature to work; the rest of the app functions without it. The dev proxy
-(`frontend/vite.config.ts`) means the backend must also be running
-(`fastapi dev app/main.py`) for `/api/*` calls to resolve.
+There is no frontend test suite and the frontend needs no env vars. The dev
+proxy (`frontend/vite.config.ts`) means the backend must also be running
+(`fastapi dev app/main.py`) for `/api/*` calls to resolve; account features
+additionally need the database (see "Database" below).
+
+### Database
+
+```
+docker compose up -d db          # Postgres 16 on 127.0.0.1:5433 (5432 was taken locally)
+alembic upgrade head             # apply migrations
+alembic revision --autogenerate -m "açıklama"   # after changing app/db/models.py; READ the result
+alembic check                    # models and database agree?
+```
+Tests never need Postgres: they run against in-memory SQLite (the `client`
+fixture in `tests/conftest.py`), which is why `app/db/models.py` uses a JSON
+type with a JSONB variant. Anything Postgres-specific should also be checked
+by hand against the real database.
 
 ## Configuration
 
@@ -82,11 +96,20 @@ design. Copy `.env.example` to `.env` and fill in:
 - `ROUTES_API_KEY` — Google Routes API key
 - `GROQ_API_KEY` — Groq API key (`GROQ_MODEL` optionally overrides the model)
 
-Security-related settings are all optional with safe defaults (see
+- `JWT_SECRET` — required, ≥32 chars (validated), signs the backend's access tokens
+
+Database/auth settings: `database_url` (optional at startup, but the DB-backed
+endpoints fail without it; compose sets it for the `api` service),
+`jwt_expire_minutes` (15), `refresh_token_expire_days` (30), `cookie_secure`
+(default `true`; `.env` sets `false` for local http), `refresh_cookie_path`
+(`/api/auth` — must match the path the *browser* sees, see "Security"),
+`refresh_reuse_grace_seconds` (10), per-user caps `max_saved_plans_per_user` /
+`max_favorites_per_user` / `max_visited_places_per_user`.
+
+Other security-related settings are optional with safe defaults (see
 "Security" below): `rate_limit_enabled` (default `true`, forced `false` in
-tests), `guest_daily_plan_limit` (default `3`), `supabase_jwt_secret`
-(default `None` — JWT verification is skipped entirely until set),
-`cors_origins` (default `http://localhost:5173`).
+tests), `guest_daily_plan_limit` (default `3`), `cors_origins` (default
+`http://localhost:5173`).
 
 ## Architecture
 
@@ -95,8 +118,8 @@ models) as the shared vocabulary between them. Routes only translate service
 exceptions into `HTTPException`s; all real logic lives in services.
 
 - [app/api/router.py](app/api/router.py) aggregates route modules
-  (`health`, `weather`, `places`, `geocoding`, `plan`, `route`) into one
-  `api_router`, included by [app/main.py](app/main.py)'s `create_app()`.
+  (`health`, `auth`, `me`, `weather`, `places`, `geocoding`, `plan`, `route`,
+  `plans`, `favorites`, `visits`) into one `api_router`, included by [app/main.py](app/main.py)'s `create_app()`.
 - [app/services/orchestrator.py](app/services/orchestrator.py) is the
   entry point for the core feature (`build_day_plan`). Flow:
   1. Resolve themes: explicit `categories`, or LLM-resolved from
@@ -171,16 +194,13 @@ fans out to several paid Google calls plus a Groq call per request:
   (constructed once at import time) doesn't accumulate a rate-limit count
   across the whole test run and start rejecting later tests.
 - [app/core/auth.py](app/core/auth.py)'s `get_optional_user_id` is a
-  FastAPI dependency that verifies a Supabase JWT (`aud=authenticated`) from
-  the `Authorization: Bearer` header if `supabase_jwt_secret` is configured,
-  returning the user id or `None`. Supabase projects expose either a legacy
-  shared secret (HS256) or, newer ones, an asymmetric "Signing Keys" public
-  key (ES256/RS256, PEM-formatted) — the code picks the algorithm by
-  sniffing whether the configured value starts with `-----BEGIN`, so either
-  one can be dropped into the same setting. It never raises — a missing or
-  invalid token just means "treat as guest," consistent with login being
-  optional everywhere else. This needs the `cryptography` package (pulled
-  in via `pyjwt[crypto]`) for the ES256/RS256 path.
+  FastAPI dependency that verifies the backend's own access token (HS256 JWT
+  signed with `JWT_SECRET`, `iss=rota-app`, `exp` and `sub` required —
+  [app/core/security.py](app/core/security.py)) from the `Authorization: Bearer`
+  header, returning the user id or `None`. It never raises — a missing or
+  invalid token just means "treat as guest". `require_user_id` (same file)
+  wraps it for login-required routes and raises `401`; use the `UserId` /
+  `Session` aliases in [app/api/deps.py](app/api/deps.py) in route signatures.
 - [app/core/guest_limit.py](app/core/guest_limit.py)'s
   `enforce_guest_plan_limit` is the server-side backstop for `/plan`'s free
   usage cap (the frontend's `guestLimit.ts` localStorage counter is
@@ -203,23 +223,28 @@ fans out to several paid Google calls plus a Groq call per request:
 - [app/main.py](app/main.py)'s `create_app()` adds `CORSMiddleware`
   (origins from `cors_origins`) and only enables `/docs`, `/redoc`,
   `/openapi.json` when `settings.debug` is true — they're closed by default.
-- [supabase/schema.sql](supabase/schema.sql) is the source of truth for
-  all four Supabase tables (`profiles`, `saved_plans`, `favorite_places`,
-  `visited_places`), their RLS policies, the `handle_new_user` trigger, and
-  the `get_shared_plan` function — apply it in the Supabase SQL Editor
-  rather than clicking it together in the dashboard, and keep it in sync
-  with whatever the dashboard ends up with. `favorite_places`/
-  `visited_places` are private (select scoped to `auth.uid() = user_id`) —
-  there's no sharing concept for a single favorited/visited place.
-  `saved_plans`'s select is *also* owner-only now (fixed 2026-10-19): it
-  used to be `using (true)` on the theory that the row id (an unguessable
-  UUID) was itself the access control, but that only holds if a row can
-  only be looked up one at a time — anyone with the anon key could `select
-  *` the whole table and enumerate every user's plans. The share-link flow
-  (`?shared=<id>`) now goes through `get_shared_plan(plan_id uuid)`, a
-  `SECURITY DEFINER` function (fixed `search_path`) that intentionally
-  bypasses RLS but only for a single row by id — `savedPlans.ts::fetchSharedPlan`
-  calls it via `supabase.rpc(...)` instead of a raw `.from('saved_plans').select()`.
+- **Ownership is enforced in code, not by the database**: with Supabase, RLS
+  did it; now every query on a user's resource filters by `user_id` (see
+  `app/services/{saved_plans,favorites,visits}.py`), and a resource that
+  belongs to someone else returns the same `404` as one that doesn't exist.
+  Keep that pattern for any new per-user table — there is no safety net below
+  the service layer. `GET /shared/{id}` is the one deliberate exception: public,
+  single-row-by-UUID lookup (never a listing), and it returns `is_owner`
+  instead of the owner's `user_id`.
+- **Refresh tokens** ([app/services/refresh_tokens.py](app/services/refresh_tokens.py),
+  [app/api/cookies.py](app/api/cookies.py)): a long-lived opaque token in an
+  `httpOnly`, `SameSite=Strict`, `Secure` cookie (`rota_refresh`); only its
+  SHA-256 is stored. It rotates on every `/auth/refresh`; a revoked token
+  replayed *after* `refresh_reuse_grace_seconds` revokes its whole family
+  (theft detection), while a replay inside the grace window just returns `401`
+  (two tabs refreshing at once). Changing the password revokes all of a user's
+  tokens and issues a fresh one for the current device. The cookie `Path`
+  (`refresh_cookie_path`, default `/api/auth`) must equal what the browser
+  sees; if the `/api` prefix changes, the cookie silently stops being sent.
+  Browser cookie `Secure` requires HTTPS in production (`cookie_secure=true`).
+- **Migrations are the schema's source of truth** (`migrations/`, generated
+  from `app/db/models.py`); `supabase/` no longer exists. Don't edit an applied
+  migration — add a new one.
 - [frontend/vite.config.ts](frontend/vite.config.ts)'s `cspPlugin` injects a
   `Content-Security-Policy` meta tag into `index.html`, but only for
   `npm run build` (`apply: 'build'`), not `npm run dev`: the dev server's
@@ -228,11 +253,11 @@ fans out to several paid Google calls plus a Groq call per request:
   (defense-in-depth against the same inline-event-handler vector the
   Leaflet pin XSS fix above closed); `style-src` does, for
   Tailwind/React's inline styles. `img-src` allows
-  `https://*.tile.openstreetmap.org` (Leaflet tiles), `connect-src` allows
-  `https://*.supabase.co`. Verified with a Playwright smoke test against a
-  real `npm run build` output (map + a live Supabase fetch, zero CSP
-  console violations) — re-verify the same way if you touch this plugin or
-  add a new external resource.
+  `https://*.tile.openstreetmap.org` (Leaflet tiles), `connect-src` is
+  `'self'` only (the API is same-origin under `/api`). It was verified with a
+  Playwright smoke test against a real `npm run build` output (zero CSP
+  console violations) when Supabase was still an external origin — re-verify
+  in a real browser if you touch this plugin or add a new external resource.
 
 ## Adding a new endpoint/service
 
@@ -245,6 +270,12 @@ fans out to several paid Google calls plus a Groq call per request:
 4. Register the router in [app/api/router.py](app/api/router.py).
 5. Test the service with `respx`-mocked HTTP responses, not the route.
 
+For a DB-backed, per-user resource instead: add the model in `app/db/models.py`
+and generate a migration; write a service that filters every query by
+`user_id`; use `UserId`/`Session` from `app/api/deps.py`; cap per-user rows;
+and test the routes through the `client` fixture (in-memory SQLite) including
+"another user can't see/delete it" cases — see `tests/test_saved_plans_routes.py`.
+
 ## Frontend
 
 `frontend/src/App.tsx` is a hand-rolled state machine: a single `view`
@@ -256,36 +287,46 @@ truth for the current plan and is lifted to `App.tsx`; screens receive it
 and report changes back up via callbacks (e.g. `DetailScreen`'s
 `onAlternativesChange`) rather than owning their own copy.
 
-- **Auth is Supabase** (`supabase.ts`, `auth.ts`), and login is optional —
-  a guest can use the app without an account. The frontend's own
-  `guestLimit.ts` (a `localStorage` counter) is just UX: it shows the
+- **Auth is the backend's own** (`auth.ts`), and login is optional — a
+  guest can use the app without an account. `auth.ts` is a module-level
+  session store read via `useSession()` / `useAuthLoading()` (no context
+  provider): the short-lived access token lives in `localStorage`, the
+  refresh token is an `httpOnly` cookie JS can't see. It refreshes silently
+  60 s before expiry, on page load (if a login hint is set), when a hidden tab
+  becomes visible, and on a `401`; across tabs it uses Web Locks plus the
+  `storage` event. Only a `401` from `/auth/refresh` ends the session — network
+  or `5xx` errors keep it and retry. `signIn`/`signUp`/`signOut`/
+  `updateUsername`/`changePassword` are plain exported functions that update
+  the store; there is no password-reset flow yet (needs SMTP). The frontend's
+  own `guestLimit.ts` (a `localStorage` counter) is just UX: it shows the
   "limit reached" screen before even making a request. The backend enforces
-  the real cap server-side (see "Security" above) and only ever learns
-  the user's identity when `App.tsx` passes
-  `session.access_token` into `createPlan()`, which attaches it as a
-  Bearer token — this happens for `/plan` only, not for every request.
-- `savedPlans.ts` wraps `supabase.from('saved_plans')` for the
-  save/favorite/share-by-link feature. The privacy model is a hard-to-guess
-  UUID as the row id, not an ACL — the table is readable by anyone with the
-  link, deletable only by the owner. `AccountScreen.tsx` and
-  `SharedPlanScreen.tsx` are the two screens that touch this table.
-- `favoritePlaces.ts` and `visitedPlaces.ts` mirror `savedPlans.ts`'s thin
-  wrapper style (no error wrapping, just return the Supabase query builder)
-  for the two single-place tables. `favoritePlaces.ts` backs the heart icon
-  on each stop in `DetailScreen.tsx` and the "Favori Mekanlarım" list in
-  `AccountScreen.tsx`. `visitedPlaces.ts::recordVisit` is called
-  (fire-and-forget, non-critical) whenever `DetailScreen.tsx`'s "Ulaşıldı"
-  toggle transitions a stop to done — it upserts a per-place visit counter,
-  which `LocationScreen.tsx` reads to show "Sık Gidilen Yerlerin" on the
-  home screen. Tapping one of those sets `Preferences.anchorPlace` and
-  jumps straight to `prefs` (see `PlanRequest.anchor_place` above) via a
-  dedicated `onPickFrequent` callback in `App.tsx` — deliberately not
-  composed from the existing `onChange`+`onContinue` pair, since calling
-  both synchronously would read `onContinue`'s stale `prefs` closure before
-  React re-renders.
+  the real cap server-side (see "Security" above) and learns the user's
+  identity from the `Authorization` header that `createPlan()` / `fetchLegs()`
+  attach (`session.access_token`).
+- `savedPlans.ts`, `favoritePlaces.ts` and `visitedPlaces.ts` are thin
+  wrappers over `apiRequest` (`api.ts`) for `/plans` + `/shared/{id}`,
+  `/favorites` and `/visits`. They return `{ data, error }` via `settle()` and
+  take the access token as an argument (not a user id: the backend derives the
+  user from the token). The privacy model for shared plans is a hard-to-guess
+  UUID plus single-row lookup (`/shared/{id}`), never a listing; `is_owner` in
+  the response decides whether `SharedPlanScreen` shows the "remove" star.
+  `favoritePlaces.ts` backs the heart icon on each stop in `DetailScreen.tsx`
+  and the "Favori Mekanlarım" list in `AccountScreen.tsx`.
+  `visitedPlaces.ts::recordVisit` is called (fire-and-forget, non-critical)
+  whenever `DetailScreen.tsx`'s "Ulaşıldı" toggle transitions a stop to done —
+  the server increments a per-place counter atomically, which
+  `LocationScreen.tsx` reads to show "Sık Gidilen Yerlerin" on the home
+  screen. Tapping one of those sets `Preferences.anchorPlace` and jumps
+  straight to `prefs` (see `PlanRequest.anchor_place` above) via a dedicated
+  `onPickFrequent` callback in `App.tsx` — deliberately not composed from the
+  existing `onChange`+`onContinue` pair, since calling both synchronously
+  would read `onContinue`'s stale `prefs` closure before React re-renders.
 - `api.ts` holds thin `fetch('/api/...')` wrappers (one per backend
   endpoint) that throw `ApiError` on non-2xx or network failure; screens
-  call these instead of using `fetch` directly. The `/api` prefix is
+  call these instead of using `fetch` directly. `apiRequest()` is the shared
+  helper for the account/data endpoints: it surfaces the backend's (Turkish)
+  `detail` as the error message and calls the registered unauthorized
+  handler on a `401` with a token. The `/api` prefix is
   rewritten by the dev proxy (`vite.config.ts`) to the backend's `http://
   localhost:8000`.
 - `meta.ts` mirrors several backend constants client-side so the frontend
