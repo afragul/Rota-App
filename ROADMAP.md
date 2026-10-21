@@ -366,8 +366,17 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   başına (`dev`/`prod`) ayrı veritabanı ve API anahtarları. Migration'lar `api`
   konteyneri açılırken otomatik uygulanır (`docker-entrypoint.sh`, tek kopya
   varsayımı; çok kopyada `RUN_MIGRATIONS=false`). `api` imajı derlenip denendi: konteynerde `alembic upgrade head`, `/health` ve kayıt (DB'ye yazma) çalıştı.
-- [ ] **CI**: GitHub Actions ile `ruff check`, `pytest`, frontend `tsc -b` ve
-  `oxlint` (şu an hiçbiri otomatik koşmuyor, `.github/` yok).
+- [x] **CI**: `.github/workflows/ci.yml` — backend (Python 3.11 ve 3.12: `ruff`,
+  `pytest`), migrations (gerçek Postgres servisinde `alembic upgrade head`,
+  `alembic check`, `downgrade base` + yeniden `upgrade`), frontend (`npm ci`,
+  oxlint, `tsc -b`, build). Sır yok, API anahtarları sahte. Her adım GitHub'a
+  göndermeden önce temiz bir klonda (`.env` yok) simüle edildi; bu sırada CI'ı ilk
+  koşuda kırabilecek bir sorun bulundu: frontend araçları Node ≥ 20.19 ister, eski
+  Node'da `npm ci` yerel bağlamaları sessizce atlıyor (workflow Node 22 kullanıyor,
+  `package.json`'a `engines` eklendi). **Açık:** workflow'un GitHub üzerindeki ilk
+  gerçek koşusu henüz görülmedi; `main` için "CI geçmeden merge edilemez" dal
+  koruması (branch protection) elle açılmalı; `pip-audit`/`npm audit` ve Dependabot
+  yok (aşağıdaki "Bağımlılık taraması" maddesi).
 - [ ] **Bağımlılık taraması (dependency scanning)**: bilinen güvenlik
   açıkları için düzenli ve otomatik tarama.
   - Frontend: `npm audit` (canlıya giden paketlerde `--omit=dev` ile 0 açık,

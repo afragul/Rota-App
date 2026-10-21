@@ -237,6 +237,8 @@ cd frontend
 npm install
 ```
 
+Node **≥ 20.19** (ya da ≥ 22.12) gerekir (Vite 8 ve oxlint). Daha eski Node'da `npm install`/`npm ci` yerel paketleri sessizce atlar ve lint/build `Cannot find native binding` ile patlar; `node -v` ile kontrol et.
+
 Frontend için ortam değişkeni gerekmez; hesap/plan/favori istekleri backend'e `/api` üzerinden
 gider. Bunların çalışması için backend'in PostgreSQL'e bağlı olması gerekir (yukarıdaki
 "Veritabanı" bölümü). Oturum: kısa ömürlü erişim token'ı `localStorage`'da, uzun ömürlü
