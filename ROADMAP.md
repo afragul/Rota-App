@@ -172,8 +172,6 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   anahtarları), `ApproachRequest`/`LegStop` koordinat aralıkları,
   `LegsRequest.stops` en fazla 25, `/geocode` `address` en fazla 200,
   `/places/nearby` `types` en fazla 5 eleman + `[a-z_]+` deseni.
-<<<<<<< feat/toggle_db
-=======
 - [x] **Misafire istek başına tek alternatif**: `/plan`, giriş yapmamış
   isteklerde `build_day_plan(..., max_alternatives=1)` çağırır; fazla
   alternatifler rota hesabından ÖNCE atılır (atılanlar için Routes çağrısı
@@ -263,7 +261,6 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   `userId`'yi kendisinin göndermesi güvenlik sağlamıyor, asıl zorlama RLS'te.
   Backend'de kullanıcıya ait kaynak olmadığı için IDOR yüzeyi yok. (Not:
   `profiles` select herkese açık, kullanıcı adları kamuya açık kabul edildi.)
->>>>>>> local
 - [x] **CORS ve yayın yapılandırması**: `CORSMiddleware` eklendi
   (`Settings.cors_origins`, virgülle ayrılmış, varsayılan dev origin'i);
   `/docs`, `/redoc`, `/openapi.json` artık `DEBUG=false` iken (yayın
@@ -400,9 +397,6 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
 - [ ] **Gizlilik politikası ve konum izni metni**: konum yalnızca tarayıcıda
   kullanılıp Routes API'ye gönderiliyor; ne toplandığı/saklandığı açıkça
   yazılsın. Hesap silme (Supabase kullanıcısı ve `saved_plans` kayıtları)
-<<<<<<< feat/toggle_db
-  için bir yol düşünülmeli.
-=======
   için bir yol düşünülmeli. Ayrıntısı aşağıdaki KVKK maddelerinde.
 
 #### KVKK (6698 sayılı Kanun) hazırlığı
@@ -464,7 +458,6 @@ aktarım şartları hukuken değerlendirilmeli. Supabase projesinin bölgesi
   şartları/DPA incelenmeli; Groq'a giden kullanıcı serbest metninin
   eğitimde kullanılmadığı ayarı doğrulanmalı.
 - [ ] **Çocuklar**: yaş sınırı ve ebeveyn onayı gerekliliği değerlendirilmeli.
->>>>>>> local
 - [ ] **Frontend testleri**: giriş, misafir limiti ve plan akışının testi yok;
   en azından `guestLimit.ts` ve `authErrorText` için birim testleri.
 - [ ] **LLM çıktı kalitesi**: planların Türkçe dönmesi prompt'ta zorlandı

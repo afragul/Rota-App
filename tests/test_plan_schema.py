@@ -87,8 +87,6 @@ def test_anchor_place_gecersiz_girdiler_reddedilir():
     ):
         with pytest.raises(ValidationError):
             AnchorPlace(**{**base, **kwargs})
-<<<<<<< feat/toggle_db
-=======
 
 
 def test_bos_veya_bosluk_city_reddedilir():
@@ -125,4 +123,3 @@ def test_legs_request_benzersiz_order_gecerli():
     ]
     request = LegsRequest(stops=stops)
     assert len(request.stops) == 2
->>>>>>> local
