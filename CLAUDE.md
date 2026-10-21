@@ -56,6 +56,17 @@ so `async def test_...()` functions run without extra decorators. HTTP calls are
 mocked with `respx` rather than hitting real APIs — follow that pattern for new
 service tests instead of mocking at the `httpx.AsyncClient` level.
 
+### CI
+
+`.github/workflows/ci.yml` runs on PRs and pushes to `main`: backend (`ruff`,
+`pytest`, Python 3.11 and 3.12), migrations (real Postgres service:
+`alembic upgrade head`, `alembic check`, downgrade/upgrade round-trip) and
+frontend (`npm ci`, lint, `tsc`, build). Run the same commands locally before
+pushing. Two things bit during setup: the frontend needs Node ≥ 20.19 (older
+Node makes `npm ci` silently skip native bindings → "Cannot find native
+binding"), and `app/services/planner.py` has `E501` ignored because its long
+lines are LLM prompt text (wrapping would change the prompt).
+
 ### Frontend
 
 All run from `frontend/`:
