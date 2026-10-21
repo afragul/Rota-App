@@ -35,9 +35,8 @@ PLAN = {
 
 
 async def _giris(client, email: str = "ada@example.com") -> dict:
-    r = await client.post(
-        "/auth/register", json={"email": email, "username": "ada", "password": "uzun-bir-sifre-1"}
-    )
+    kayit = {"email": email, "username": email.split("@")[0], "password": "uzun-bir-sifre-1"}
+    r = await client.post("/auth/register", json=kayit)
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
@@ -122,3 +121,13 @@ async def test_gecersiz_plan_reddedilir(client, override):
     h = await _giris(client)
     r = await client.post("/plans", json={**PLAN, **override}, headers=h)
     assert r.status_code == 422
+
+
+async def test_paylasimda_is_owner_yalniz_sahibine_true(client):
+    ada = await _giris(client, "ada@example.com")
+    can = await _giris(client, "can@example.com")
+    plan_id = (await client.post("/plans", json=PLAN, headers=ada)).json()["id"]
+
+    assert (await client.get(f"/shared/{plan_id}", headers=ada)).json()["is_owner"] is True
+    assert (await client.get(f"/shared/{plan_id}", headers=can)).json()["is_owner"] is False
+    assert (await client.get(f"/shared/{plan_id}")).json()["is_owner"] is False

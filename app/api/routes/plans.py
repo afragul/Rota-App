@@ -1,8 +1,9 @@
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.api.deps import Session, UserId
+from app.core.auth import get_optional_user_id
 from app.core.rate_limit import limiter
 from app.schemas.saved_plan import (
     SavedPlanCreated,
@@ -57,9 +58,17 @@ async def delete_saved_plan(
 
 @shared_router.get("/{plan_id}", response_model=SharedPlan)
 @limiter.limit("30/minute")
-async def get_shared_plan(request: Request, plan_id: uuid.UUID, session: Session) -> SharedPlan:
-    """Paylaşım linkiyle planı açar (giriş gerekmez)."""
+async def get_shared_plan(
+    request: Request,
+    plan_id: uuid.UUID,
+    session: Session,
+    viewer_id: str | None = Depends(get_optional_user_id),
+) -> SharedPlan:
+    """Paylaşım linkiyle planı açar (giriş gerekmez). Geçerli token varsa ve plan
+    o kullanıcınınsa `is_owner` true döner (UI'ın "kaydedilenlerden çıkar" düğmesi için)."""
     plan = await service.get_shared_plan(session, plan_id)
     if plan is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Plan bulunamadı")
-    return SharedPlan.model_validate(plan, from_attributes=True)
+    shared = SharedPlan.model_validate(plan, from_attributes=True)
+    shared.is_owner = viewer_id is not None and viewer_id == str(plan.user_id)
+    return shared

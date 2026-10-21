@@ -11,6 +11,7 @@ from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserO
 from app.services.users import (
     EmailAlreadyRegisteredError,
     InvalidCredentialsError,
+    UsernameTakenError,
     authenticate_user,
     register_user,
 )
@@ -44,6 +45,10 @@ async def register(
     except EmailAlreadyRegisteredError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Bu e-posta ile zaten bir hesap var"
+        ) from None
+    except UsernameTakenError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Bu kullanıcı adı alınmış"
         ) from None
     return _token_response(user)
 

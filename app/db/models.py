@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -37,6 +38,10 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+# Kullanıcı adı büyük/küçük harf farkı gözetmeden benzersiz ("Ada" ile "ada" aynı sayılır).
+Index("uq_users_username_lower", func.lower(User.username), unique=True)
 
 
 class SavedPlan(Base):

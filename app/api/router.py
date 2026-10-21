@@ -5,6 +5,7 @@ from app.api.routes import (
     favorites,
     geocoding,
     health,
+    me,
     places,
     plan,
     plans,
@@ -25,3 +26,4 @@ api_router.include_router(plans.router)
 api_router.include_router(plans.shared_router)
 api_router.include_router(favorites.router)
 api_router.include_router(visits.router)
+api_router.include_router(me.router)

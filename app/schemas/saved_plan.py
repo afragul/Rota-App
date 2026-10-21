@@ -35,7 +35,8 @@ class SavedPlanSummary(BaseModel):
 
 
 class SharedPlan(BaseModel):
-    """Paylaşım linkiyle açılan tam plan. Sahibin kimliği (user_id) bilerek yok."""
+    """Paylaşım linkiyle açılan tam plan. Sahibin kimliği (user_id) bilerek yok;
+    yerine isteği yapanın sahibi olup olmadığını söyleyen `is_owner` var."""
 
     id: UUID
     theme: str
@@ -45,3 +46,4 @@ class SharedPlan(BaseModel):
     legs: list[RouteLeg]
     routes_available: bool
     created_at: datetime
+    is_owner: bool = False

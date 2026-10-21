@@ -19,9 +19,8 @@ def _yer(n: int) -> dict:
 
 
 async def _giris(client, email: str = "ada@example.com") -> dict:
-    r = await client.post(
-        "/auth/register", json={"email": email, "username": "ada", "password": "uzun-bir-sifre-1"}
-    )
+    kayit = {"email": email, "username": email.split("@")[0], "password": "uzun-bir-sifre-1"}
+    r = await client.post("/auth/register", json=kayit)
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
