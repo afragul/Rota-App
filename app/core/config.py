@@ -56,8 +56,19 @@ class Settings(BaseSettings):
     # bir kullanıcı adına token üretebilir.
     jwt_secret: SecretStr
 
-    # Erişim token'ının ömrü (dakika).
-    jwt_expire_minutes: int = 60
+    jwt_expire_minutes: int = 15
+
+    # Refresh token (httpOnly cookie, veritabanında hash'li) ömrü ve cookie ayarları.
+    # Erişim token'ı kısa ömürlü, oturumu refresh token sürdürür.
+    refresh_token_expire_days: int = 30
+    # Cookie yalnızca HTTPS üzerinden gider; yerel http geliştirmede COOKIE_SECURE=false.
+    cookie_secure: bool = True
+    # Cookie'nin yolu, tarayıcının gördüğü adresle eşleşmeli: frontend API'ye /api
+    # önekiyle gidiyor (bkz. vite.config.ts proxy), yani /api/auth/*.
+    refresh_cookie_path: str = "/api/auth"
+    # Aynı refresh token'ın bu süre içindeki ikinci kullanımı "çalıntı" sayılmaz
+    # (iki sekmenin aynı anda yenilemesi); süre dışı tekrar kullanım tüm zinciri kapatır.
+    refresh_reuse_grace_seconds: int = 10
 
     # Bir kullanıcının kaydedebileceği en fazla plan sayısı (depolama şişmesin).
     max_saved_plans_per_user: int = 100

@@ -1,8 +1,10 @@
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
+from app.api.cookies import set_refresh_cookie
 from app.api.deps import Session, UserId
 from app.core.rate_limit import limiter
 from app.schemas.auth import ChangePasswordRequest, UpdateProfileRequest, UserOut
+from app.services import refresh_tokens
 from app.services.users import (
     InvalidCredentialsError,
     UsernameTakenError,
@@ -54,7 +56,8 @@ async def update_me(
 async def change_my_password(
     request: Request, payload: ChangePasswordRequest, user_id: UserId, session: Session
 ) -> Response:
-    """Mevcut şifreyi doğrulayıp yenisini belirler."""
+    """Mevcut şifreyi doğrulayıp yenisini belirler. Başka cihazlardaki oturumlar
+    kapanır; bu cihaz için yeni bir refresh token verilir (oturumu sürer)."""
     try:
         await change_password(session, user_id, payload.current_password, payload.new_password)
     except InvalidCredentialsError:
@@ -65,4 +68,7 @@ async def change_my_password(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Hesap bulunamadı"
         ) from None
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    await refresh_tokens.revoke_all_for_user(session, user_id)
+    out = Response(status_code=status.HTTP_204_NO_CONTENT)
+    set_refresh_cookie(out, await refresh_tokens.issue_token(session, user_id))
+    return out
