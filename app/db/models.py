@@ -1,9 +1,10 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     JSON,
     Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -130,3 +131,17 @@ class RefreshToken(Base):
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+
+class DailyUsage(Base):
+    """Giriş yapmış kullanıcının o günkü (Türkiye saatiyle) ücretli uç çağrı sayaçları.
+    Veritabanında tutulur: süreç yeniden başlayınca sıfırlanmaz, çoklu worker'da paylaşılır."""
+
+    __tablename__ = "daily_usage"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    plans: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    legs: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

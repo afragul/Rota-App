@@ -238,10 +238,15 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
 - [ ] **Rate limit — bellek içi sayaçlar**: slowapi ve `guest_limit.py` sayaçları
   bellekte; yeniden başlatmada sıfırlanır, çoklu worker'da limit worker sayısı
   kadar gevşer. Tek worker ile başla; büyürse Redis.
-- [ ] **Rate limit — giriş yapanlar için günlük üst sınır**: giriş yapan
-  kullanıcı `/plan`'da yalnızca dakikada 10 ile sınırlı, günlük sınır yok;
-  hesap açmak ücretsiz olduğundan maliyet riski var. Kullanıcı bazlı günlük
-  sınır düşünülebilir.
+- [x] **Rate limit — giriş yapanlar için günlük üst sınır**: hesap başına günlük
+  kota, veritabanında (`daily_usage`, migration 0004): `/plan` 30, `/route/legs`
+  300 (`USER_DAILY_PLAN_LIMIT`/`USER_DAILY_LEGS_LIMIT`). Artırma tek koşullu
+  `UPDATE` ile atomik; gün Türkiye saatine göre; yeniden başlatmada sıfırlanmaz,
+  çoklu worker'da paylaşılır. Gerçek Postgres'te 25 eşzamanlı oturumla denendi
+  (tam 5 izin / 20 red / 0 hata, limit 5). Açık: limit değerleri tahmini, gerçek
+  kullanımla ayarlanmalı; kota dolunca frontend yalnızca genel hata metnini
+  gösteriyor (kalan hak / sıfırlanma saati gösterimi yok); misafir sayacı hâlâ
+  bellek içi (aşağıdaki "bellek içi sayaçlar" maddesi).
 - [x] **Rate limit — giriş/kayıt**: auth artık backend'de; `/auth/register`
   `5/dakika`, `/auth/login` `10/dakika`, `/auth/refresh` `30/dakika`,
   `/me/password` `5/dakika` (IP bazlı). Açık kalan: hesap bazlı kilitleme

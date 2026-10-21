@@ -5,7 +5,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password, verify_password
-from app.db.models import FavoritePlace, RefreshToken, SavedPlan, User, VisitedPlace
+from app.db.models import (
+    DailyUsage,
+    FavoritePlace,
+    RefreshToken,
+    SavedPlan,
+    User,
+    VisitedPlace,
+)
 
 
 class AuthServiceError(Exception):
@@ -110,7 +117,7 @@ async def delete_account(session: AsyncSession, user_id: uuid.UUID, password: st
     user = await get_user(session, user_id)
     if not await verify_password(user.password_hash, password):
         raise InvalidCredentialsError
-    for table in (RefreshToken, SavedPlan, FavoritePlace, VisitedPlace):
+    for table in (RefreshToken, SavedPlan, FavoritePlace, VisitedPlace, DailyUsage):
         await session.execute(
             delete(table)
             .where(table.user_id == user_id)
