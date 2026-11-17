@@ -21,6 +21,8 @@ interface Props {
   session: Session | null
   onOpenSaved: (id: string) => void
   onOpenPrivacy: () => void
+  /** Kullanıcı bilerek çıkış yaptı ya da hesabını sildi (süresi dolan oturum bunu çağırmaz). */
+  onLoggedOut: () => void
   /** E-postadaki sıfırlama bağlantısından gelen token (varsa yeni şifre formu açılır). */
   resetToken: string | null
   onResetDone: () => void
@@ -257,10 +259,12 @@ function LoggedInPanel({
   session,
   onOpenSaved,
   onAccountDeleted,
+  onSignedOut,
 }: {
   session: Session
   onOpenSaved: (id: string) => void
   onAccountDeleted: () => void
+  onSignedOut: () => void
 }) {
   const [deletingAccount, setDeletingAccount] = useState(false)
   const username = session.user.username
@@ -493,7 +497,10 @@ function LoggedInPanel({
       </div>
 
       <button
-        onClick={signOut}
+        onClick={() => {
+          signOut()
+          onSignedOut()
+        }}
         className="h-12 rounded-xl bg-surface-container-high text-ink font-label-md text-label-md flex items-center justify-center gap-1.5"
       >
         <Icon name="logout" className="text-[18px]" />
@@ -518,7 +525,7 @@ function LoggedInPanel({
 
 // Giriş opsiyonel: uygulama misafir olarak da kullanılabilir, bu ekran sadece
 // hesap oluşturup giriş yapmak isteyenler için (bkz. Shell'deki hesap ikonu).
-export function AccountScreen({ session, onOpenSaved, onOpenPrivacy, resetToken, onResetDone }: Props) {
+export function AccountScreen({ session, onOpenSaved, onOpenPrivacy, onLoggedOut, resetToken, onResetDone }: Props) {
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -558,7 +565,11 @@ export function AccountScreen({ session, onOpenSaved, onOpenPrivacy, resetToken,
         session={session}
         onOpenSaved={onOpenSaved}
         // Hesap silinince oturum kapanır ve bu bileşen giriş formuna döner; kullanıcı ne olduğunu görsün.
-        onAccountDeleted={() => setNotice('Hesabın ve tüm verilerin kalıcı olarak silindi.')}
+        onAccountDeleted={() => {
+          onLoggedOut()
+          setNotice('Hesabın ve tüm verilerin kalıcı olarak silindi.')
+        }}
+        onSignedOut={onLoggedOut}
       />
     )
   }

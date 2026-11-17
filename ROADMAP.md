@@ -530,12 +530,14 @@ yazılmalı; yurt dışına aktarım şartları hukuken değerlendirilmeli.
   **Açık:** bileşen/ekran testi yok (jsdom + Testing Library gerekir); plan akışının
   uçtan uca testi yok; Web Locks gerçek tarayıcıda iki sekmeyle elle denenmedi
   (testte kilit sahte).
-- [ ] **Sayfa yenilenince ekran ve plan kayboluyor**: oturum geri geliyor (sessiz yenileme)
-  ama `view`/`plan`/tercihler yalnızca React durumunda; siteden çıkıp girince kullanıcı
-  ana ekrandan başlar ve oluşturduğu plan gider (plan Google/Groq çağrısı maliyetli
-  olduğundan yeniden üretmek de pahalı). Çözüm fikri: son planı ve tercihleri
-  `localStorage`'a yaz, açılışta sor/geri yükle (kaydedilmiş plan zaten hesapla
-  `/plans`'ta duruyor, bu yalnızca anlık plan için).
+- [x] **Sayfa yenilenince ekran ve plan kayboluyordu** (yapıldı): son plan, tercihler ve
+  açık ekran (sonuçlar ya da plan detayı) `localStorage`'a yazılıyor
+  (`frontend/src/planStorage.ts`), açılışta geri yükleniyor. Plan üretildikten 12 saat
+  sonra geçersiz (süre yenilemeyle uzamaz); bozuk/eski sürüm kayıt yok sayılır. Bilerek
+  çıkış yapınca ve hesap silinince hem cihazdan hem ekrandan silinir (süresi dolan
+  oturumda silinmez). Gizlilik metnine eklendi. **Açık:** `App.tsx` bağlantısı tarayıcıda
+  elle denenmedi (bileşen testi yok); "Ulaşıldı" işaretleri ve konum izni yenilemede
+  sıfırlanır (kasıtlı: yalnızca plan/tercih/ekran saklanıyor).
 - [ ] **LLM çıktı kalitesi**: planların Türkçe dönmesi prompt'ta zorlandı
   ama rastgele kayma tamamen ölçülmedi; birkaç gerçek çıktıyla kontrol, gerekirse
   `temperature` düşürme.

@@ -4,6 +4,7 @@ import { useAuthLoading, useSession } from './auth'
 import { ErrorBanner } from './components/ErrorBanner'
 import { Shell, type NavKey } from './components/Shell'
 import { guestLimitReached, recordGuestPlan } from './guestLimit'
+import { clearState, loadState, saveState } from './planStorage'
 import { DEFAULT_PREFS, hasLocation, toRequest, type Preferences } from './prefs'
 import { AccountScreen } from './screens/AccountScreen'
 import { ClarifyScreen } from './screens/ClarifyScreen'
@@ -86,12 +87,20 @@ function readResetToken(): string | null {
 }
 
 export default function App() {
-  // Tercihler ve son plan ekranlar arasında korunur.
-  const [prefs, setPrefs] = useState<Preferences>(DEFAULT_PREFS)
-  const [plan, setPlan] = useState<DayPlan | null>(null)
+  // Tercihler ve son plan ekranlar arasında korunur; sayfa yenilense de kaybolmasın diye
+  // cihazda da saklanır (bkz. planStorage.ts). Okuma saf: StrictMode başlatıcıyı iki kez çalıştırır.
+  const [restored] = useState(loadState)
+  const [prefs, setPrefs] = useState<Preferences>(restored?.prefs ?? DEFAULT_PREFS)
+  const [plan, setPlan] = useState<DayPlan | null>(restored?.plan ?? null)
+  // Planın üretildiği an: geri yüklenen plan için kayıttan, yenisi için üretildiğinde (bkz. planStorage.ts).
+  const planCreatedAt = useRef(restored?.createdAt ?? 0)
   // Sıfırlama bağlantısıyla gelindiyse doğrudan hesap ekranında başla (yeni şifre formu orada).
   const [view, setView] = useState<View>(() =>
-    readResetToken() ? { name: 'account', from: { name: 'location' } } : { name: 'location' },
+    readResetToken()
+      ? { name: 'account', from: { name: 'location' } }
+      : restored
+        ? restored.view
+        : { name: 'location' },
   )
   const [userLoc, setUserLoc] = useState<UserLocation>({ status: 'idle' })
   const abort = useRef<AbortController | null>(null)
@@ -107,6 +116,28 @@ export default function App() {
   useEffect(() => {
     if (resetToken) window.history.replaceState(null, '', window.location.pathname + window.location.search)
   }, [resetToken])
+
+  // Plan/tercih/ekran değiştikçe cihaza yaz. Detay ve navigasyon "detay"a, diğer her ekran
+  // (tercihler, hata, hesap...) "sonuçlar"a döner: yenilemede kullanıcı planına geri gelir.
+  useEffect(() => {
+    if (!plan) return
+    const index = view.name === 'detail' || view.name === 'navigate' ? view.index : null
+    saveState({
+      plan,
+      prefs,
+      view: index === null ? { name: 'results' } : { name: 'detail', index },
+      createdAt: planCreatedAt.current,
+    })
+  }, [plan, prefs, view])
+
+  // Çıkış yapılınca/hesap silinince plan ve tercihler hem ekrandan hem cihazdan silinir
+  // (ortak bir cihazda bir sonraki kişi önceki kullanıcının planını görmesin).
+  const onLoggedOut = () => {
+    abort.current?.abort()
+    clearState()
+    setPlan(null)
+    setPrefs(DEFAULT_PREFS)
+  }
 
   // Kullanıcının konumu yalnızca plan detayında, ilk durağa rota için istenir.
   const requestLocation = useCallback(() => {
@@ -143,6 +174,7 @@ export default function App() {
         } else {
           // Hak yalnızca başarıyla üretilen planlarda düşer (soru dönüşü ve hatalar sayılmaz).
           if (!session) recordGuestPlan()
+          planCreatedAt.current = Date.now()
           setPlan(response)
           setView({ name: 'results' })
         }
@@ -285,6 +317,7 @@ export default function App() {
           session={session}
           onOpenSaved={setSharedId}
           onOpenPrivacy={openPrivacy}
+          onLoggedOut={onLoggedOut}
           resetToken={resetToken}
           onResetDone={() => setResetToken(null)}
         />

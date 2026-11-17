@@ -381,6 +381,16 @@ and report changes back up via callbacks (e.g. `DetailScreen`'s
   the real cap server-side (see "Security" above) and learns the user's
   identity from the `Authorization` header that `createPlan()` / `fetchLegs()`
   attach (`session.access_token`).
+- **Reload persistence** (`planStorage.ts`): the current plan, preferences and open
+  screen (`results` or `detail`+index; everything else falls back to `results`) are
+  mirrored to `localStorage` (`rota.lastPlan`) by an effect in `App.tsx` and restored
+  by a pure lazy initializer. Records expire 12 h after the plan was *generated*
+  (`createdAt`, held in a ref — re-saving or reloading must not extend it), are
+  version-tagged and shape-checked (anything doubtful is ignored → home screen).
+  An explicit sign-out or account deletion (`AccountScreen` → `onLoggedOut`) clears
+  both the stored copy and the in-memory plan/prefs; an *expired* session does not
+  (that would wipe the plan mid-use). It is device-local, never sent to the server,
+  and is mentioned in `PrivacyScreen`.
 - `savedPlans.ts`, `favoritePlaces.ts` and `visitedPlaces.ts` are thin
   wrappers over `apiRequest` (`api.ts`) for `/plans` + `/shared/{id}`,
   `/favorites` and `/visits`. They return `{ data, error }` via `settle()` and
