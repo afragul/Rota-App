@@ -93,6 +93,7 @@ cp .env.example .env
 | `HTTP_TIMEOUT` | hayır | Dış servis çağrıları için saniye cinsinden zaman aşımı (varsayılan `10.0`) |
 | `APP_NAME` | hayır | Varsayılan: `Rota App` |
 | `DEBUG` | hayır | Varsayılan: `false`. `true` olmadıkça `/docs`, `/redoc`, `/openapi.json` kapalıdır. |
+| `LOG_LEVEL`, `LOG_FORMAT` | hayır | Varsayılanlar `INFO` ve `text`. Canlıda `LOG_FORMAT=json` önerilir: satır başına bir JSON nesnesi (log toplayıcılar için). Her log satırında istek numarası (`request_id`) bulunur |
 | `RATE_LIMIT_ENABLED` | hayır | Varsayılan: `true`. IP bazlı rate limiting'i (`slowapi`) kapatmak için `false` (testlerde kapalı) |
 | `GUEST_DAILY_PLAN_LIMIT` | hayır | Varsayılan: `3`. Giriş yapmamış kullanıcıların günlük `/plan` kotası (sunucu tarafı; `frontend/src/guestLimit.ts`'teki `GUEST_PLAN_LIMIT` ile aynı tutulmalı) |
 | `GUEST_DAILY_LEGS_LIMIT` | hayır | Varsayılan: `20`. Giriş yapmamış kullanıcıların günlük `/route/legs` (durak sil/sırala/ekle) kotası — `/plan`'dan ayrı bir sayaç, daha sık tetiklenen bir aksiyon olduğu için daha yüksek |
@@ -166,7 +167,8 @@ pytest
 
 | Metot | Yol | Açıklama |
 | --- | --- | --- |
-| `GET` | `/health` | Sağlık kontrolü |
+| `GET` | `/health` | Canlılık: süreç ayakta mı (hız limitinden muaf, bağımlılığa dokunmaz) |
+| `GET` | `/health/ready` | Hazırlık: veritabanı cevap veriyor mu. `200 {"status":"ok"}` ya da `503 {"status":"unavailable"}`; sebep dışarı verilmez, log'a yazılır. Yük dengeleyici/izleme için |
 | `GET` | `/weather` | Verilen koordinat için anlık hava durumu |
 | `GET` | `/places/nearby` | Verilen koordinat ve türlere göre yakındaki mekânlar |
 | `GET` | `/geocode` | Şehir/adres metnini koordinata çevirir |

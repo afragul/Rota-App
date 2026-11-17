@@ -4,6 +4,7 @@ from datetime import date
 from fastapi import HTTPException, Request, status
 from slowapi.util import get_remote_address
 
+from app.core.audit import audit
 from app.core.config import get_settings
 
 # IP -> (son görülen gün, o gündeki istek sayısı). Tek process içinde
@@ -41,6 +42,7 @@ def enforce_guest_plan_limit(request: Request, user_id: str | None) -> None:
         return
     ip = get_remote_address(request)
     if not _gunluk_hak_var_mi(_counts, ip, get_settings().guest_daily_plan_limit):
+        audit(request, "misafir günlük plan kotası doldu")
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Günlük misafir plan hakkınız doldu. Giriş yapıp devam edebilirsiniz.",
@@ -60,6 +62,7 @@ def enforce_guest_legs_limit(request: Request, user_id: str | None) -> None:
         return
     ip = get_remote_address(request)
     if not _gunluk_hak_var_mi(_legs_counts, ip, get_settings().guest_daily_legs_limit):
+        audit(request, "misafir günlük durak düzenleme kotası doldu")
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Günlük misafir durak düzenleme hakkınız doldu. Giriş yapıp devam edin.",

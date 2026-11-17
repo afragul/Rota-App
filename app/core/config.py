@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     # --- Uygulama ---
     app_name: str = "Rota App"
     debug: bool = False
+    # Log seviyesi ve biçimi: canlıda "json" (log toplayıcılar için), yerelde okunaklı "text".
+    log_level: str = "INFO"
+    log_format: Literal["text", "json"] = "text"
 
     # --- Dış servisler ---
     # Varsayılanı yok: key eksikse uygulama açılışta patlar (bilinçli tercih)

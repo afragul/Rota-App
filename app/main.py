@@ -2,7 +2,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
@@ -10,7 +9,8 @@ from app.api.errors import register_exception_handlers
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.logging import setup_logger
-from app.core.rate_limit import limiter
+from app.core.rate_limit import limiter, rate_limit_exceeded_handler
+from app.core.request_id import RequestIdMiddleware
 
 
 @asynccontextmanager
@@ -21,8 +21,8 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    setup_logger()  # her seyden once
     settings = get_settings()
+    setup_logger(settings.log_level, settings.log_format)  # her seyden once
     # Prod'da (debug=False) API dokümantasyonu dışarıya açık kalmasın.
     app = FastAPI(
         title=settings.app_name,
@@ -42,8 +42,10 @@ def create_app() -> FastAPI:
     )
 
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
     app.add_middleware(SlowAPIMiddleware)
+    # En sonda eklenen en dışta çalışır: numara, diğer her şeyden (CORS, limit) önce atanır.
+    app.add_middleware(RequestIdMiddleware)
     register_exception_handlers(app)
 
     app.include_router(api_router)

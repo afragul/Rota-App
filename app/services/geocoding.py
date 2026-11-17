@@ -4,6 +4,7 @@ from typing import Any
 import httpx
 
 from app.core.config import get_settings
+from app.core.logging import clean_log
 from app.schemas.geocoding import GeocodeResult
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,9 @@ async def geocode_address(address: str) -> GeocodeResult:
     api_status = data.get("status")
     results = data.get("results") or []
     if api_status != "OK" or not results:
-        logger.warning("Geocoding '%s' için sonuç döndürmedi (status=%s)", address, api_status)
+        logger.warning(
+            "Geocoding '%s' için sonuç döndürmedi (status=%s)", clean_log(address), api_status
+        )
         raise GeocodingServiceError(f"'{address}' için konum bulunamadı")
 
     return _to_result(results[0])
