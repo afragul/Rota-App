@@ -78,7 +78,7 @@ npm run lint      # oxlint
 npm test          # Vitest (saf mantık: api.ts, prefs.ts, nav.ts, geo.ts, meta.ts, guestLimit.ts, authErrors.ts)
 npx tsc -b --noEmit   # type-check without emitting
 ```
-The frontend has a small Vitest suite (`src/*.test.ts`, `npm test`, also run in CI) that covers pure logic and `api.ts` with a stubbed `fetch`; there are no component/DOM tests (no jsdom) and `auth.ts` (timers, Web Locks, cross-tab sync) is untested. `meta.test.ts` also checks `THEME_TYPES` against `app/core/themes.py`, so editing one without the other fails the test. The frontend needs no env vars. The dev
+The frontend has a small Vitest suite (`src/*.test.ts`, `npm test`, also run in CI) that covers pure logic and `api.ts` with a stubbed `fetch`; there are no component/DOM tests (no jsdom) and `auth.ts` is covered by `auth.test.ts` (module reloaded per test with stubbed `localStorage`/`window`/`navigator`/`fetch` and fake timers; `getSession()`/`isAuthLoading()` exist so non-React code and tests can read the store). Vitest 5 needs Node ≥ 22: on an older local Node a failing test crashes the reporter with `Map.groupBy is not a function`. `meta.test.ts` also checks `THEME_TYPES` against `app/core/themes.py`, so editing one without the other fails the test. The frontend needs no env vars. The dev
 proxy (`frontend/vite.config.ts`) means the backend must also be running
 (`fastapi dev app/main.py`) for `/api/*` calls to resolve; account features
 additionally need the database (see "Database" below).

@@ -525,9 +525,17 @@ yazılmalı; yurt dışına aktarım şartları hukuken değerlendirilmeli.
   `prefs.ts`, `nav.ts`, `geo.ts`, `meta.ts`, `guestLimit.ts`, `authErrors.ts`
   (`authErrorText` bu yüzden `AccountScreen`'den ayrı dosyaya taşındı). `meta.test.ts`
   ayrıca frontend `THEME_TYPES`'ının backend `themes.py` ile birebir aynı olduğunu
-  doğrular. **Açık:** bileşen/ekran testi yok (jsdom + Testing Library gerekir);
-  `auth.ts` (zamanlayıcı, Web Locks, sekmeler arası senkron) ve plan akışının
-  uçtan uca testi yok.
+  doğrular. `auth.ts` da testli (`auth.test.ts`, 25 test: açılışta sessiz geri kazanma, süre dolmadan
+  yenileme, 401/ağ hatası, başka sekmeyle senkron, görünürlük, giriş/çıkış/hesap silme).
+  **Açık:** bileşen/ekran testi yok (jsdom + Testing Library gerekir); plan akışının
+  uçtan uca testi yok; Web Locks gerçek tarayıcıda iki sekmeyle elle denenmedi
+  (testte kilit sahte).
+- [ ] **Sayfa yenilenince ekran ve plan kayboluyor**: oturum geri geliyor (sessiz yenileme)
+  ama `view`/`plan`/tercihler yalnızca React durumunda; siteden çıkıp girince kullanıcı
+  ana ekrandan başlar ve oluşturduğu plan gider (plan Google/Groq çağrısı maliyetli
+  olduğundan yeniden üretmek de pahalı). Çözüm fikri: son planı ve tercihleri
+  `localStorage`'a yaz, açılışta sor/geri yükle (kaydedilmiş plan zaten hesapla
+  `/plans`'ta duruyor, bu yalnızca anlık plan için).
 - [ ] **LLM çıktı kalitesi**: planların Türkçe dönmesi prompt'ta zorlandı
   ama rastgele kayma tamamen ölçülmedi; birkaç gerçek çıktıyla kontrol, gerekirse
   `temperature` düşürme.
