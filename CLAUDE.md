@@ -272,7 +272,11 @@ fans out to several paid Google calls plus a Groq call per request:
   (`refresh_cookie_path`, default `/api/auth`) must equal what the browser
   sees; if the `/api` prefix changes, the cookie silently stops being sent.
   Browser cookie `Secure` requires HTTPS in production (`cookie_secure=true`).
-- **Password reset** ([app/services/password_reset.py](app/services/password_reset.py),
+- **Password reset is shelved (KVKK): keep `SMTP_*` unset.** The code works but
+  sending the address + reset link to a foreign mail provider is a cross-border
+  transfer we don't want yet; with SMTP unset the feature is off (see below). Don't
+  configure a provider before picking a domestic/EU one; see ROADMAP "Milestone 5".
+- **Password reset** ([app/services/password_reset.py](app/services/password_reset.py)(app/services/password_reset.py),
   [app/services/email.py](app/services/email.py)): `POST /auth/forgot` always
   answers the same `202` whether or not the email has an account (no
   enumeration) and sends the mail in a background task so timing doesn't leak
