@@ -79,6 +79,7 @@ def enforce_guest_search_limit(request: Request, user_id: str | None) -> None:
         return
     ip = get_remote_address(request)
     if not _gunluk_hak_var_mi(_search_counts, ip, get_settings().guest_daily_search_limit):
+        audit(request, "misafir günlük mekan arama kotası doldu")
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Günlük misafir arama hakkınız doldu. Giriş yapıp devam edebilirsiniz.",
