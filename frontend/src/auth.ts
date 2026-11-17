@@ -231,12 +231,21 @@ function subscribe(listener: () => void) {
   return () => listeners.delete(listener)
 }
 
+// React dışından (ve testlerden) oturumu okumak için; kancalar da bunları kullanır.
+export function getSession(): Session | null {
+  return current
+}
+
+export function isAuthLoading(): boolean {
+  return loading
+}
+
 // Giriş isteğe bağlı: oturum yoksa null (misafir).
 export function useSession(): Session | null {
-  return useSyncExternalStore(subscribe, () => current)
+  return useSyncExternalStore(subscribe, getSession)
 }
 
 // Açılışta refresh cookie'siyle oturum geri kazanılırken true (bu sürede "misafir" kararı verme).
 export function useAuthLoading(): boolean {
-  return useSyncExternalStore(subscribe, () => loading)
+  return useSyncExternalStore(subscribe, isAuthLoading)
 }
