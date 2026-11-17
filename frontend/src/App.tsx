@@ -12,6 +12,7 @@ import { NavigationScreen } from './screens/NavigationScreen'
 import { LimitScreen } from './screens/LimitScreen'
 import { LoadingScreen } from './screens/LoadingScreen'
 import { LocationScreen } from './screens/LocationScreen'
+import { PrivacyScreen } from './screens/PrivacyScreen'
 import { PreferencesScreen } from './screens/PreferencesScreen'
 import { ResultsScreen } from './screens/ResultsScreen'
 import { SharedPlanScreen } from './screens/SharedPlanScreen'
@@ -30,6 +31,7 @@ type View =
   | { name: 'detail'; index: number }
   | { name: 'navigate'; index: number; approach: ApproachRoute }
   | { name: 'account'; from: View }
+  | { name: 'privacy'; from: View }
 
 function errorCopy(error: ApiError): { title: string; message: string } {
   if (error.userLimit)
@@ -58,6 +60,7 @@ const TITLES: Record<View['name'], string> = {
   detail: 'Plan Detayı',
   navigate: 'Navigasyon',
   account: 'Hesabım',
+  privacy: 'Gizlilik',
 }
 
 const NAV_FOR: Record<View['name'], NavKey | null> = {
@@ -71,6 +74,7 @@ const NAV_FOR: Record<View['name'], NavKey | null> = {
   detail: 'plans',
   navigate: 'plans',
   account: null,
+  privacy: null,
 }
 
 // Şifre sıfırlama e-postasındaki bağlantı `/#reset=<token>` biçimindedir: token fragment'te
@@ -159,6 +163,7 @@ export default function App() {
   }
 
   const openAccount = () => setView({ name: 'account', from: view })
+  const openPrivacy = () => setView({ name: 'privacy', from: view })
 
   const onNav = (key: NavKey) => {
     if (key === 'discover') setView({ name: 'location' })
@@ -212,7 +217,7 @@ export default function App() {
       onBack={
         view.name === 'detail'
           ? () => setView({ name: 'results' })
-          : view.name === 'account'
+          : view.name === 'account' || view.name === 'privacy'
             ? () => setView(view.from)
             : undefined
       }
@@ -231,6 +236,7 @@ export default function App() {
             setView({ name: 'prefs' })
           }}
           session={session}
+          onOpenPrivacy={openPrivacy}
         />
       )}
       {view.name === 'prefs' && <PreferencesScreen prefs={prefs} onChange={setPrefs} onSubmit={() => (hasLocation(prefs) ? submit() : setView({ name: 'location' }))} />}
@@ -278,10 +284,12 @@ export default function App() {
           key={accountKey}
           session={session}
           onOpenSaved={setSharedId}
+          onOpenPrivacy={openPrivacy}
           resetToken={resetToken}
           onResetDone={() => setResetToken(null)}
         />
       )}
+      {view.name === 'privacy' && <PrivacyScreen />}
     </Shell>
   )
 }

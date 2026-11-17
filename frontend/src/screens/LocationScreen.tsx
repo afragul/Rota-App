@@ -13,12 +13,13 @@ interface Props {
   // haliyle onContinue'nun hasLocation kontrolüne takılmasına yol açardı.
   onPickFrequent: (place: VisitedPlace) => void
   session: Session | null
+  onOpenPrivacy: () => void
 }
 
 // Başlangıçta yalnızca şehir/semt seçilir. Kullanıcının GPS konumu burada
 // istenmez; plan çıktıktan sonra, ilk durağa nasıl gideceğini göstermek için
 // plan detayında kullanılır.
-export function LocationScreen({ prefs, onChange, onContinue, onPickFrequent, session }: Props) {
+export function LocationScreen({ prefs, onChange, onContinue, onPickFrequent, session, onOpenPrivacy }: Props) {
   const ready = hasLocation(prefs)
   const [frequent, setFrequent] = useState<VisitedPlace[]>([])
 
@@ -111,7 +112,10 @@ export function LocationScreen({ prefs, onChange, onContinue, onPickFrequent, se
       <div className="bg-surface-container p-3.5 rounded-xl flex items-center gap-3 mt-1 mb-8">
         <Icon name="near_me" className="text-ink text-[20px] flex-shrink-0" />
         <p className="font-body-sm text-body-sm text-text-secondary leading-snug">
-          Plan hazır olunca, bulunduğunuz yerden ilk durağa nasıl gideceğinizi göstermek için konumunuzu isteyeceğiz.
+          Plan hazır olunca, bulunduğunuz yerden ilk durağa nasıl gideceğinizi göstermek için konumunuzu isteyeceğiz.{' '}
+          <button type="button" onClick={onOpenPrivacy} className="text-primary underline">
+            Gizlilik ve Aydınlatma Metni
+          </button>
         </p>
       </div>
 
