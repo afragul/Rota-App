@@ -103,5 +103,7 @@ jobs:
         run: npm run lint
       - name: Tip kontrolü
         run: npx tsc -b --noEmit
+      - name: Testler (Vitest)
+        run: npm test
       - name: Build
         run: npm run build

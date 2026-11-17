@@ -520,8 +520,14 @@ yazılmalı; yurt dışına aktarım şartları hukuken değerlendirilmeli.
   şartları/DPA incelenmeli; Groq'a giden kullanıcı serbest metninin
   eğitimde kullanılmadığı ayarı doğrulanmalı.
 - [ ] **Çocuklar**: yaş sınırı ve ebeveyn onayı gerekliliği değerlendirilmeli.
-- [ ] **Frontend testleri**: giriş, misafir limiti ve plan akışının testi yok;
-  en azından `guestLimit.ts` ve `authErrorText` için birim testleri.
+- [x] **Frontend testleri** (kısmen): Vitest kuruldu (`npm test`, CI'da ayrı adım).
+  64 test: `api.ts` (sahte `fetch`: hata/limit bayrakları, 401 kancası, iptal),
+  `prefs.ts`, `nav.ts`, `geo.ts`, `meta.ts`, `guestLimit.ts`, `authErrors.ts`
+  (`authErrorText` bu yüzden `AccountScreen`'den ayrı dosyaya taşındı). `meta.test.ts`
+  ayrıca frontend `THEME_TYPES`'ının backend `themes.py` ile birebir aynı olduğunu
+  doğrular. **Açık:** bileşen/ekran testi yok (jsdom + Testing Library gerekir);
+  `auth.ts` (zamanlayıcı, Web Locks, sekmeler arası senkron) ve plan akışının
+  uçtan uca testi yok.
 - [ ] **LLM çıktı kalitesi**: planların Türkçe dönmesi prompt'ta zorlandı
   ama rastgele kayma tamamen ölçülmedi; birkaç gerçek çıktıyla kontrol, gerekirse
   `temperature` düşürme.
