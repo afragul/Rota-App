@@ -462,6 +462,15 @@ yazılmalı; yurt dışına aktarım şartları hukuken değerlendirilmeli.
   hangi amaçla ve hangi hukuki sebeple işlendiği, kimlere aktarıldığı, saklama
   süresi, ilgili kişi hakları ve başvuru yolu. Kayıt/giriş ekranından ve
   alt bilgiden erişilebilir olmalı.
+- [ ] **Gizlilik metnindeki yer tutucuları doldur (yayın engeli)**:
+  `frontend/src/screens/PrivacyScreen.tsx` en üstündeki üç sabit hâlâ `[...]`
+  olarak ekranda görünüyor, doldurulmadan yayına çıkılmamalı:
+  - `CONTROLLER`: veri sorumlusunun adı/unvanı (kişi mi, şirket mi?).
+  - `CONTACT`: KVKK başvuru e-posta adresi (şifre sıfırlamadaki SMTP'den bağımsız,
+    yalnızca kullanıcıların bize yazacağı adres).
+  - `HOSTING`: barındırıcı ve sunucunun ülkesi (barındırma kararı verilince).
+  Ayrıca metin hukukçuya gösterilmeli ve log saklama süresi netleşince
+  "Ne kadar saklıyoruz?" bölümüne eklenmeli.
 - [ ] **Konum için bilgilendirme/rıza metni**: şehir yazarak plan, cihaz
   konumu (navigasyon) ve ziyaret geçmişi ayrı ayrı anlatılsın; konumun açık
   rıza gerektirip gerektirmediği hukuki olarak netleştirilsin. Tarayıcı konum
