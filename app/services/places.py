@@ -42,34 +42,16 @@ def _to_place(raw: dict[str, Any]) -> Place:
     )
 
 
-async def search_nearby(
-    latitude: float,
-    longitude: float,
-    included_types: list[str],
-    radius: float = 1500.0,
-    max_results: int = 10,
-) -> list[Place]:
-    """Verilen koordinatın çevresinde, istenen türlerdeki mekânları döndürür."""
+async def _post_places(endpoint: str, payload: dict[str, Any]) -> list[Place]:
+    """Places API'ye (New) tek bir POST atıp mekân listesini döndürür (searchNearby/searchText)."""
     settings = get_settings()
-    url = f"{settings.google_places_base_url}/places:searchNearby"
+    url = f"{settings.google_places_base_url}/places:{endpoint}"
 
     headers = {
         "Content-Type": "application/json",
         # SecretStr'ı düz metne çevirdiğimiz TEK yer burası
         "X-Goog-Api-Key": settings.places_api_key.get_secret_value(),
         "X-Goog-FieldMask": _FIELD_MASK,
-    }
-
-    payload = {
-        "includedTypes": included_types,
-        "maxResultCount": max_results,
-        "languageCode": "tr",  # mekân adları ve adresler Türkçe gelsin
-        "locationRestriction": {
-            "circle": {
-                "center": {"latitude": latitude, "longitude": longitude},
-                "radius": radius,
-            }
-        },
     }
 
     try:
@@ -83,3 +65,52 @@ async def search_nearby(
 
     # Hiç sonuç yoksa Google boş bir gövde döner: {}
     return [_to_place(item) for item in data.get("places", [])]
+
+
+async def search_nearby(
+    latitude: float,
+    longitude: float,
+    included_types: list[str],
+    radius: float = 1500.0,
+    max_results: int = 10,
+) -> list[Place]:
+    """Verilen koordinatın çevresinde, istenen türlerdeki mekânları döndürür."""
+    return await _post_places(
+        "searchNearby",
+        {
+            "includedTypes": included_types,
+            "maxResultCount": max_results,
+            "languageCode": "tr",  # mekân adları ve adresler Türkçe gelsin
+            "locationRestriction": {
+                "circle": {
+                    "center": {"latitude": latitude, "longitude": longitude},
+                    "radius": radius,
+                }
+            },
+        },
+    )
+
+
+async def search_text(
+    query: str,
+    latitude: float,
+    longitude: float,
+    radius: float = 5000.0,
+    max_results: int = 8,
+) -> list[Place]:
+    """Serbest metinle mekân arar (ör. "Kozahan", "deniz manzaralı kafe"). Sonuçlar verilen
+    koordinata yakın olanlara öncelik verir ama o bölgeyle sınırlı değildir (locationBias)."""
+    return await _post_places(
+        "searchText",
+        {
+            "textQuery": query,
+            "pageSize": max_results,
+            "languageCode": "tr",
+            "locationBias": {
+                "circle": {
+                    "center": {"latitude": latitude, "longitude": longitude},
+                    "radius": radius,
+                }
+            },
+        },
+    )

@@ -258,7 +258,7 @@ fans out to several paid Google calls plus a Groq call per request:
   Logged-in users have their own daily caps, **per account and persisted in
   the DB** (`app/core/user_limit.py` + `app/services/usage.py`, table
   `daily_usage`, settings `user_daily_plan_limit` 30 / `user_daily_legs_limit`
-  300): account creation is free, so a login alone must not unlock unlimited
+  300); `/places/search` (free-text place search, one paid Google Text Search per call) has its own third counter `searches` (`guest_daily_search_limit` 20 / `user_daily_search_limit` 100), added by migration 0006: account creation is free, so a login alone must not unlock unlimited
   paid Google/Groq calls. The increment is a single conditional `UPDATE ... WHERE
   counter < limit` (atomic — concurrent requests can't overshoot), the day is
   Turkey time (fixed UTC+3), and the `429` carries `X-User-Limit-Reached`, not

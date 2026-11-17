@@ -1,4 +1,4 @@
-import type { ApproachRoute, PlanRequest, PlanResponse, RouteLeg, TravelMode } from './types'
+import type { ApproachRoute, Place, PlanRequest, PlanResponse, RouteLeg, TravelMode } from './types'
 
 export class ApiError extends Error {
   status: number
@@ -112,6 +112,40 @@ export async function fetchLegs(
   }
   const data = await response.json()
   return data.legs
+}
+
+// Serbest metinle mekan arar (Google Text Search, ücretli: backend misafire ve hesaba günlük
+// kota koyar). Konum yalnızca öncelik içindir; sonuçlar başka yerden de gelebilir.
+export async function searchPlaces(
+  query: string,
+  near: LatLng,
+  signal?: AbortSignal,
+  accessToken?: string,
+): Promise<Place[]> {
+  const params = new URLSearchParams({
+    q: query,
+    latitude: String(near.latitude),
+    longitude: String(near.longitude),
+  })
+  let response: Response
+  try {
+    response = await fetch(`/api/places/search?${params}`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      signal,
+    })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err
+    throw new ApiError(0, 'Sunucuya ulaşılamadı')
+  }
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      response.status === 422 ? 'Arama metni geçersiz' : 'Arama yapılamadı',
+      response.headers.get('X-Guest-Limit-Reached') === '1',
+      response.headers.get('X-User-Limit-Reached') === '1',
+    )
+  }
+  return response.json()
 }
 
 // Süresi dolmuş/geçersiz token'la 401 alınınca oturumu kapatmak için auth.ts kaydeder

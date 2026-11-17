@@ -2,6 +2,7 @@ import type { Session } from '../auth'
 import { useEffect, useState } from 'react'
 import { fetchApproach, fetchLegs, type LatLng } from '../api'
 import { Icon } from '../components/Icon'
+import { PlaceSearch } from '../components/PlaceSearch'
 import { RouteMap } from '../components/RouteMap'
 import { addFavoritePlace, listFavoritePlaces, removeFavoritePlace } from '../favoritePlaces'
 import { TRAVEL_MODES, THEMES, THEME_TYPES, formatCost, formatDistance, formatHours, mapsUrl, planStyle } from '../meta'
@@ -93,6 +94,9 @@ interface StopEditSheetProps {
   mode: 'replace' | 'add'
   stop: PlanStop | null // mode 'replace' iken değiştirilen durak
   pool: Place[]
+  /** Mekan aramasında sonuçların yakınında toplanacağı nokta (planın bölgesi). */
+  near: LatLng
+  accessToken?: string
   favoritePlaces: Place[]
   usedIds: Set<string>
   alternatives: PlanAlternative[]
@@ -111,6 +115,8 @@ function StopEditSheet({
   mode,
   stop,
   pool,
+  near,
+  accessToken,
   favoritePlaces,
   usedIds,
   alternatives,
@@ -121,7 +127,7 @@ function StopEditSheet({
   onTransferIn,
   onClose,
 }: StopEditSheetProps) {
-  const [tab, setTab] = useState<'category' | 'other' | 'favorites'>('category')
+  const [tab, setTab] = useState<'category' | 'other' | 'favorites' | 'search'>('category')
   const [category, setCategory] = useState<string | null>(null)
   const favoriteCandidates = favoritePlaces.filter((p) => !usedIds.has(p.place_id))
 
@@ -160,6 +166,15 @@ function StopEditSheet({
           </button>
           <button
             type="button"
+            onClick={() => setTab('search')}
+            className={`flex-1 min-h-11 py-2 px-1 rounded-xl font-label-sm text-label-sm leading-tight ${
+              tab === 'search' ? 'bg-plan-a text-on-primary' : 'bg-surface-container-low text-ink'
+            }`}
+          >
+            Mekan ara
+          </button>
+          <button
+            type="button"
             onClick={() => setTab('favorites')}
             className={`flex-1 min-h-11 py-2 px-1 rounded-xl font-label-sm text-label-sm leading-tight ${
               tab === 'favorites' ? 'bg-plan-a text-on-primary' : 'bg-surface-container-low text-ink'
@@ -179,7 +194,9 @@ function StopEditSheet({
           </button>
         </div>
 
-        {tab === 'category' ? (
+        {tab === 'search' ? (
+          <PlaceSearch near={near} accessToken={accessToken} usedIds={usedIds} onPick={onPickPlace} />
+        ) : tab === 'category' ? (
           <div className="flex flex-col gap-space-sm">
             <div className="flex gap-space-xs overflow-x-auto py-space-xs">
               <button
@@ -327,6 +344,15 @@ export function DetailScreen({
   const [swapFor, setSwapFor] = useState<PlanStop | null>(null)
   const [adding, setAdding] = useState(false)
   const [favoritePlaces, setFavoritePlaces] = useState<Place[]>([])
+  // Mekan aramasının önceliklendireceği nokta: planın kendi bölgesi (ilk koordinatlı durak,
+  // yoksa havuzdaki ilk mekan). Hiçbiri yoksa Türkiye'nin ortası: yalnızca öncelik, sınır değil.
+  const anchorStop = stops.find((st) => st.latitude != null && st.longitude != null)
+  const firstPooled = plan.place_pool?.[0]
+  const searchCenter: LatLng = anchorStop
+    ? { latitude: anchorStop.latitude!, longitude: anchorStop.longitude! }
+    : firstPooled
+      ? { latitude: firstPooled.latitude, longitude: firstPooled.longitude }
+      : { latitude: 39.0, longitude: 35.0 }
   const w = plan.weather
 
   // Sekme değişince (başka bir alternatife geçilince) önceki plana ait
@@ -799,6 +825,8 @@ export function DetailScreen({
           mode={swapFor ? 'replace' : 'add'}
           stop={swapFor}
           pool={plan.place_pool ?? []}
+          near={searchCenter}
+          accessToken={session?.access_token}
           favoritePlaces={favoritePlaces}
           usedIds={new Set(plan.alternatives.flatMap((a) => a.stops.map((st) => st.place_id)))}
           alternatives={plan.alternatives}
