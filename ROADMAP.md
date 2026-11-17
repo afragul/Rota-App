@@ -402,12 +402,15 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
     (açık bir pakette otomatik güncelleme önerisi açar).
 - [ ] **Hata izleme ve log**: backend log'larının toplanması, frontend için
   hata raporlama (ör. Sentry); LLM/Google hata oranlarının izlenmesi.
-- [ ] **`/health` kapsamı**: şu an yalnızca "ayakta" döner; yayın ortamında
-  bağımlılık durumunu (en azından anahtarların tanımlı olması) da yansıtsın.
-- [ ] **Log yapısı**: her isteğe bir istek numarası (request id) verilip log
-  satırlarına yazılsın; log biçimi canlıda yapılandırılmış (JSON) olabilir.
-  Şu an düz metin, yalnızca konsola, seviye sabit `INFO`.
-- [ ] **Güvenlik olayları için audit log**: şu an hiçbiri kaydedilmiyor.
+- [x] **`/health` kapsamı**: `/health` canlılık (hep hızlı), yeni `/health/ready`
+  veritabanına `SELECT 1` atar, bozuksa `503 {"status":"unavailable"}` (ayrıntı dışarı
+  verilmez, sebep log'a). API anahtarları tanımsızsa uygulama zaten açılmıyor.
+  **Açık:** yayın ortamında bu uç bir izleme/yük dengeleyiciye bağlanmalı;
+  `docker-compose.yml`'a `healthcheck` eklenmedi.
+- [x] **Log yapısı**: her isteğe numara (`X-Request-ID`, log satırlarında
+  `request_id`); `LOG_FORMAT=json` ve `LOG_LEVEL` ayarları. **Açık:** loglar hâlâ yalnızca
+  konsola gidiyor (toplama/saklama canlı ortama bağlı).
+- [ ] **Güvenlik olayları için audit log** — **kısmen yapıldı** (logger `audit`, yalnızca IP + yol): rate limit aşıldı, misafir kotası doldu, geçersiz/süresi dolmuş token (INFO). **Açık:** giriş yapmış kullanıcının kota dolumu (`user_limit.py`) loglanmıyor; başarısız girişler (`/auth/login` 401) ayrıca loglanmıyor; kimlikle loglama kararı. Eski not: şu an hiçbiri kaydedilmiyordu.
   `warning` olarak (IP + yol + olay; token'ın kendisi ASLA) şunlar yazılmalı:
   misafir kotası aşıldı (`guest_limit.py`), rate limit aşıldı (slowapi'nin
   varsayılan işleyicisi log yazmıyor), geçersiz/süresi dolmuş JWT
@@ -419,7 +422,14 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   bu istekler backend'e uğruyor, yani kimlik (`sub`) ile loglanabilirler; ama
   kimlik/audit log'u henüz yazılmıyor. Uvicorn erişim log'unun
   proxy arkasında doğru istemci IP'sini yazdığı doğrulanmalı.
-- [ ] **Log'a girenlerin temizlenmesi**: kullanıcı metni (`geocoding.py` adres,
+- [ ] **Log saklama süresi ve Docker log döndürme (sunucuya geçerken)**: karar: barındırıcı
+  seçilince birlikte ele alınacak. Şu an loglar yalnızca stdout'a gidiyor; Docker
+  varsayılanında konteyner ömrü boyunca ve sınırsız tutulur (`docker-compose.yml`'da
+  `logging` ayarı yok, disk dolabilir). Yapılacak: üst süre belirle (ör. 30 gün, hukuki
+  danışmanla), `max-size`/`max-file` ile döndürme, süreyi aydınlatma metnindeki
+  "Ne kadar saklıyoruz?" bölümüne yaz. Loglarda IP, istek yolu ve (temizlenmiş) şehir/adres
+  metni var; koordinat, token, şifre, LLM yanıtı yok.
+- [x] **Log'a girenlerin temizlenmesi** (yapıldı: `clean_log`, koordinat ve LLM yanıt alıntısı artık loglanmıyor; **açık:** log saklama süresi). Eski not: kullanıcı metni (`geocoding.py` adres,
   `orchestrator.py` şehir) satır sonu karakterleri temizlenerek yazılmalı (log
   injection); koordinatlar (`weather.py`, `orchestrator.py`) ve LLM yanıtından
   alıntı (`planner.py`, ilk 300 karakter; kullanıcı notu içerebilir) kişisel

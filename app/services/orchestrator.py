@@ -2,6 +2,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
+from app.core.logging import clean_log
 from app.core.themes import DEFAULT_THEMES, filter_for_bad_weather, types_for
 from app.schemas.places import Place
 from app.schemas.plan import (
@@ -30,9 +31,8 @@ async def _resolve_coordinates(request: PlanRequest) -> tuple[float, float]:
 
     assert request.city is not None  # PlanRequest validator'ı garanti ediyor
     result = await geocode_address(request.city)
-    logger.info(
-        "'%s' -> (%s, %s) olarak çözümlendi", request.city, result.latitude, result.longitude
-    )
+    # Koordinatlar kişisel veri sayılabilir: yalnızca çözümlendiği yazılır.
+    logger.info("'%s' koordinata çözümlendi", clean_log(request.city))
     return result.latitude, result.longitude
 
 
