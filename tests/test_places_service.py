@@ -87,3 +87,44 @@ async def test_istek_dogru_kuruluyor():
     assert body["includedTypes"] == ["cafe", "bakery"]
     assert body["locationRestriction"]["circle"]["radius"] == 800
     assert body["languageCode"] == "tr"
+
+def _text_url() -> str:
+    return f"{get_settings().google_places_base_url}/places:searchText"
+
+
+@respx.mock
+async def test_metin_aramasi_sonuclari_doner_ve_konuma_oncelik_verir():
+    import json
+
+    from app.services.places import search_text
+
+    route = respx.post(_text_url()).mock(return_value=httpx.Response(200, json=FAKE_RESPONSE))
+
+    places = await search_text("Kitap Kahve", 40.18, 29.06)
+
+    assert [p.name for p in places] == ["Kitap Kahve"]
+    sent = json.loads(route.calls.last.request.content)
+    assert sent["textQuery"] == "Kitap Kahve"
+    assert sent["languageCode"] == "tr"
+    # Bölgeyle sınırlama değil, öncelik (locationBias): başka şehirdeki yer de bulunabilsin.
+    assert "locationBias" in sent and "locationRestriction" not in sent
+    assert route.calls.last.request.headers["X-Goog-Api-Key"]
+
+
+@respx.mock
+async def test_metin_aramasi_sonuc_yoksa_bos_liste():
+    from app.services.places import search_text
+
+    respx.post(_text_url()).mock(return_value=httpx.Response(200, json={}))
+
+    assert await search_text("yokboyleyer", 40.18, 29.06) == []
+
+
+@respx.mock
+async def test_metin_aramasi_hatada_places_service_error():
+    from app.services.places import search_text
+
+    respx.post(_text_url()).mock(return_value=httpx.Response(500))
+
+    with pytest.raises(PlacesServiceError):
+        await search_text("kahve", 40.18, 29.06)

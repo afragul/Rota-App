@@ -16,6 +16,8 @@ _counts: dict[str, tuple[date, int]] = defaultdict(lambda: (date.min, 0))
 # (her durak sil/sırala/ekle çağırır), aynı sayaca karışırsa ikisi birbirini
 # etkiler.
 _legs_counts: dict[str, tuple[date, int]] = defaultdict(lambda: (date.min, 0))
+# Mekân arama (Google Text Search) için ayrı sayaç; diğerlerinin kotasını tüketmesin.
+_search_counts: dict[str, tuple[date, int]] = defaultdict(lambda: (date.min, 0))
 
 
 def _gunluk_hak_var_mi(counts: dict[str, tuple[date, int]], ip: str, limit: int) -> bool:
@@ -63,5 +65,19 @@ def enforce_guest_legs_limit(request: Request, user_id: str | None) -> None:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Günlük misafir durak düzenleme hakkınız doldu. Giriş yapıp devam edin.",
+            headers={"X-Guest-Limit-Reached": "1"},
+        )
+
+
+def enforce_guest_search_limit(request: Request, user_id: str | None) -> None:
+    """Giriş yapmamış istekler için günlük mekân arama kotası (her arama ücretli bir
+    Google Text Search çağrısı). /plan ve /route/legs sayaçlarından ayrıdır."""
+    if user_id is not None:
+        return
+    ip = get_remote_address(request)
+    if not _gunluk_hak_var_mi(_search_counts, ip, get_settings().guest_daily_search_limit):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Günlük misafir arama hakkınız doldu. Giriş yapıp devam edebilirsiniz.",
             headers={"X-Guest-Limit-Reached": "1"},
         )

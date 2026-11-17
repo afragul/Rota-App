@@ -126,11 +126,17 @@ kullanıyor.
   dönüyordu (çoğu zaman görünürde hiçbir şey değişmiyordu). Artık ayrı bir
   `onCreateOwn` prop'u var, `App.tsx` bunu açıkça `location` view'ına
   yönlendiriyor.
-- [ ] **Mekan arama (serbest metinle herhangi bir yeri aratıp rotaya ekleme)**:
-  değerlendirildi, kullanıcı şimdilik istemedi — Google Places Text
-  Search/Autocomplete gerektirir, favoriler/havuzdan ekle/sık gidilenlerin
-  aksine her kullanımda gerçek bir API maliyeti olur.
-- [ ] **Mekan fotoğrafı/yorumları**: Google Places'te ek maliyetli
+- [x] **Mekan arama (serbest metinle herhangi bir yeri aratıp rotaya ekleme)**:
+  yapıldı. `GET /places/search` (Google Places Text Search, `locationBias` ile planın
+  bölgesine yakın sonuçlar öne çıkar, bölgeyle sınırlı değil); arayüzde durak
+  ekle/değiştir sayfasında "Mekan ara" sekmesi (`components/PlaceSearch.tsx`).
+  Her arama ücretli olduğu için: yazdıkça değil yalnızca "Ara"ya basınca istek
+  gider, `20/dakika` IP limiti, misafir günlük 20 / hesap günlük 100 arama
+  (ayrı `searches` sayacı, migration 0006). **Açık:** gerçek Google anahtarıyla
+  uçtan uca denenmedi (testler sahte yanıtla); alan maskesi `searchNearby` ile aynı
+  (puan alanı yüzünden daha pahalı fiyat katmanına girebilir: Google faturasında
+  kontrol edilmeli); arayüz tarayıcıda elle denenmedi.
+- [ ] **Mekan fotoğrafı/yorumları** (karar: şimdilik yok, ileride bir güncellemede): Google Places'te ek maliyetli
   (fotoğraf: mekan+fotoğraf başına ayrı çağrı; yorumlar: daha pahalı bir
   fiyat katmanı + ayrı Place Details çağrısı gerektiriyor). Ücretsiz bir
   yol bulunursa değerlendirilecek, şu an öncelik değil.
@@ -138,8 +144,9 @@ kullanıyor.
   filtresi var (ücretsiz); kullanıcının serbest metinle ("bunu beğenmedim,
   daha sakin bir yer olsun" gibi) tarif etmesi ve LLM'in havuzdan/yeni
   aramadan seçmesi — maliyet/karmaşıklık nedeniyle kapsam dışı tutuldu.
-- [ ] **Profil fotoğrafı**: Supabase Storage kaldırıldığı için dosya depolama
-  yeniden kararlaştırılmalı (sunucu diski, S3 uyumlu bir depo vb.); henüz yok.
+- [ ] **Profil fotoğrafı** (karar: yok, dosya yüklemesi yapılmayacak): bunun yerine ileride
+  basit bir seçim: renk seçtirme ya da hazır avatarlar (bitmoji tarzı). Dosya
+  depolama ve KVKK yükü olmadığı için tercih edildi.
 
 ## Milestone 4 — Public'e açılış hazırlığı
 

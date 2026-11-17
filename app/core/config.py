@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     # olduğu için guest_daily_plan_limit'ten kasıtlı olarak daha yüksek.
     guest_daily_legs_limit: int = 20
 
+    # Giriş yapmamış kullanıcıların günlük mekân arama (Google Text Search, ücretli) kotası.
+    guest_daily_search_limit: int = 20
+
     # Kendi ürettiğimiz erişim token'larını (JWT, HS256) imzalamak için gizli anahtar.
     # Varsayılanı yok: eksikse uygulama açılışta patlar. En az 32 karakter,
     # rastgele olmalı (ör. `openssl rand -hex 32`); sızarsa herkes herhangi
@@ -79,6 +82,7 @@ class Settings(BaseSettings):
     # Gün, Türkiye saatine göre (UTC+3) başlar/biter. Sayaç veritabanında tutulur.
     user_daily_plan_limit: int = 30
     user_daily_legs_limit: int = 300
+    user_daily_search_limit: int = 100
 
     # --- E-posta (şifre sıfırlama) ---
     # Genel SMTP: Gmail (uygulama şifresi), Resend, SendGrid, Mailgun... hangi sağlayıcı olursa.

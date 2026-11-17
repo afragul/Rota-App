@@ -13,7 +13,11 @@ async def _enforce(session: AsyncSession, user_id: str | None, kind: usage.Usage
     if user_id is None:
         return
     settings = get_settings()
-    limit = settings.user_daily_plan_limit if kind == "plans" else settings.user_daily_legs_limit
+    limit = {
+        "plans": settings.user_daily_plan_limit,
+        "legs": settings.user_daily_legs_limit,
+        "searches": settings.user_daily_search_limit,
+    }[kind]
     try:
         allowed = await usage.consume(session, uuid.UUID(user_id), kind, limit)
     except usage.UserNotFoundError:
@@ -37,3 +41,7 @@ async def enforce_user_plan_limit(session: AsyncSession, user_id: str | None) ->
 
 async def enforce_user_legs_limit(session: AsyncSession, user_id: str | None) -> None:
     await _enforce(session, user_id, "legs")
+
+
+async def enforce_user_search_limit(session: AsyncSession, user_id: str | None) -> None:
+    await _enforce(session, user_id, "searches")

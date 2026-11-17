@@ -145,6 +145,7 @@ class DailyUsage(Base):
     day: Mapped[date] = mapped_column(Date, primary_key=True)
     plans: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     legs: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    searches: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class PasswordResetToken(Base):

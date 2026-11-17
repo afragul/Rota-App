@@ -96,6 +96,7 @@ cp .env.example .env
 | `RATE_LIMIT_ENABLED` | hayır | Varsayılan: `true`. IP bazlı rate limiting'i (`slowapi`) kapatmak için `false` (testlerde kapalı) |
 | `GUEST_DAILY_PLAN_LIMIT` | hayır | Varsayılan: `3`. Giriş yapmamış kullanıcıların günlük `/plan` kotası (sunucu tarafı; `frontend/src/guestLimit.ts`'teki `GUEST_PLAN_LIMIT` ile aynı tutulmalı) |
 | `GUEST_DAILY_LEGS_LIMIT` | hayır | Varsayılan: `20`. Giriş yapmamış kullanıcıların günlük `/route/legs` (durak sil/sırala/ekle) kotası — `/plan`'dan ayrı bir sayaç, daha sık tetiklenen bir aksiyon olduğu için daha yüksek |
+| `GUEST_DAILY_SEARCH_LIMIT` | hayır | Varsayılan: `20`. Giriş yapmamış kullanıcıların günlük mekan arama (`/places/search`, ücretli Google Text Search) kotası; ayrı sayaç |
 | `JWT_SECRET` | evet | Erişim token'larını imzalamak için gizli anahtar, en az 32 karakter (`openssl rand -hex 32`). Sızarsa herkes istediği kullanıcı adına token üretebilir; yayında ayrı bir değer kullan |
 | `JWT_EXPIRE_MINUTES` | hayır | Varsayılan: `15`. Erişim token'ının ömrü; oturumu refresh token sürdürür |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | hayır | Varsayılan: `30`. Refresh token (çerez) ömrü |
@@ -106,6 +107,7 @@ cp .env.example .env
 | `MAX_SAVED_PLANS_PER_USER`, `MAX_FAVORITES_PER_USER`, `MAX_VISITED_PLACES_PER_USER` | hayır | Varsayılan: `100`, `200`, `500`. Kullanıcı başına depolama üst sınırları |
 | `USER_DAILY_PLAN_LIMIT` | hayır | Varsayılan: `30`. Giriş yapmış bir kullanıcının günlük `/plan` kotası (hesap açmak ücretsiz olduğundan ücretli Google/Groq çağrılarına hesap başına da üst sınır). Gün Türkiye saatine (UTC+3) göre; sayaç veritabanında tutulur |
 | `USER_DAILY_LEGS_LIMIT` | hayır | Varsayılan: `300`. Giriş yapmış bir kullanıcının günlük `/route/legs` kotası (`/plan`'dan ayrı sayaç) |
+| `USER_DAILY_SEARCH_LIMIT` | hayır | Varsayılan: `100`. Giriş yapmış bir kullanıcının günlük `/places/search` kotası (ayrı sayaç) |
 | `SMTP_HOST`, `SMTP_FROM` | hayır | Şifre sıfırlama e-postaları için SMTP sunucusu ve gönderen (`Rota <no-reply@alanadi.com>`). **Yoksa özellik kapalıdır:** `/auth/forgot` 503 verir, arayüz "şifremi unuttum" bağlantısını göstermez |
 | `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_SECURITY` | hayır | Varsayılan port `587`, güvenlik `starttls` (`ssl` = 465, `none` = yalnızca yerel test). Hangi sağlayıcı olursa (Gmail uygulama şifresi, Resend, SendGrid, Mailgun) SMTP bilgilerini buraya yaz |
 | `FRONTEND_BASE_URL` | hayır | Varsayılan: `http://localhost:5173`. E-postadaki sıfırlama bağlantısı bununla başlar; yayında frontend'in gerçek adresi olmalı |
@@ -169,6 +171,7 @@ pytest
 | `GET` | `/health` | Sağlık kontrolü |
 | `GET` | `/weather` | Verilen koordinat için anlık hava durumu |
 | `GET` | `/places/nearby` | Verilen koordinat ve türlere göre yakındaki mekânlar |
+| `GET` | `/places/search` | Serbest metinle mekan arama (`q`, `latitude`, `longitude`: konum yalnızca öncelik verir). Ücretli; misafir ve hesap başına günlük kota |
 | `GET` | `/geocode` | Şehir/adres metnini koordinata çevirir |
 | `POST` | `/plan` | Konum, süre, bütçe, grup tipi ve tema/serbest metin tercihlerinden alternatif gün planları üretir (serbest metin belirsizse önce netleştirme sorusu döner) |
 | `POST` | `/route/approach` | Kullanıcının konumundan verilen noktaya (genelde ilk durak) tek ayaklık rota |

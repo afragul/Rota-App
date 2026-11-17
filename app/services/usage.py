@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import DailyUsage, User
 
-UsageKind = Literal["plans", "legs"]
+UsageKind = Literal["plans", "legs", "searches"]
 
 # Türkiye 2016'dan beri yaz saati uygulamıyor: sabit UTC+3 yeterli (tzdata gerekmez).
 _TURKEY = timedelta(hours=3)
