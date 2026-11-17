@@ -458,14 +458,15 @@ sunucu bölgesi ve sözleşme koşulları kontrol edilip aydınlatma metninde
 yazılmalı; yurt dışına aktarım şartları hukuken değerlendirilmeli.
 
 **Yapılacaklar:**
-- [ ] **Aydınlatma metni**: veri sorumlusu kimliği ve iletişim, hangi verinin
+- [ ] **Aydınlatma metni** — **taslak yapıldı** (`frontend/src/screens/PrivacyScreen.tsx`; ana ekrandaki konum notundan ve giriş/kayıt formundan açılır). **Açık:** veri sorumlusu adı, KVKK başvuru adresi ve barındırıcı yer tutucu (`[...]`), yayından önce doldurulmalı; metin hukukçuya gösterilmeli; saklama süreleri (log) henüz yazılamadı. Metin şunları kapsamalı: veri sorumlusu kimliği ve iletişim, hangi verinin
   hangi amaçla ve hangi hukuki sebeple işlendiği, kimlere aktarıldığı, saklama
   süresi, ilgili kişi hakları ve başvuru yolu. Kayıt/giriş ekranından ve
   alt bilgiden erişilebilir olmalı.
 - [ ] **Konum için bilgilendirme/rıza metni**: şehir yazarak plan, cihaz
   konumu (navigasyon) ve ziyaret geçmişi ayrı ayrı anlatılsın; konumun açık
   rıza gerektirip gerektirmediği hukuki olarak netleştirilsin. Tarayıcı konum
-  izni isteminden önce kısa bir açıklama gösterilsin.
+  izni isteminden önce kısa bir açıklama gösterilsin. (Ana ekranda kısa not ve
+  gizlilik metnine bağlantı var; ayrı rıza metni yok.)
 - [ ] **Silme hakkı**: hesap silme akışı (`users`, `saved_plans`,
   `favorite_places`, `visited_places`, `refresh_tokens`). **Backend yapıldı:**
   `DELETE /me` (şifre doğrulamalı, tek işlemde hepsini kalıcı siler — soft
