@@ -482,9 +482,38 @@ export function DetailScreen({
   }
 
   // Konum plan çıkınca, ilk kez detay açıldığında istenir (başlangıçta değil).
+  // Tarayıcı izni daha önce hiç sorulmadıysa (durum "prompt"), doğrudan tarayıcı
+  // diyaloğunu açmak yerine önce kısa bir açıklama kartı gösteriyoruz
+  // (bkz. ROADMAP.md "Konum için bilgilendirme/rıza metni"); izin zaten
+  // verilmiş/reddedilmişse tarayıcı zaten karar vermiş demektir, yeniden
+  // açıklamaya gerek yok, doğrudan isteriz (gerçek bir diyalog açılmaz).
+  const [locationExplain, setLocationExplain] = useState(false)
   useEffect(() => {
-    if (userLoc.status === 'idle') onRequestLocation()
+    if (userLoc.status !== 'idle') return
+    let cancelled = false
+    if (!navigator.permissions?.query) {
+      setLocationExplain(true)
+      return
+    }
+    navigator.permissions
+      .query({ name: 'geolocation' })
+      .then((result) => {
+        if (cancelled) return
+        if (result.state === 'prompt') setLocationExplain(true)
+        else onRequestLocation()
+      })
+      .catch(() => {
+        if (!cancelled) setLocationExplain(true)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [userLoc.status, onRequestLocation])
+
+  const useLocation = () => {
+    setLocationExplain(false)
+    onRequestLocation()
+  }
 
   // Kullanıcının konumundan ilk durağa rota.
   const first = stops.find((st) => st.latitude != null && st.longitude != null)
@@ -633,9 +662,18 @@ export function DetailScreen({
                 {TRAVEL_MODES[approach.route.travel_mode].verb} ({formatDistance(approach.route.distance_meters)})
               </span>
             )}
-            {(userLoc.status === 'idle' || userLoc.status === 'loading' || approach.state === 'loading') && (
-              <span className="font-body-sm text-body-sm text-text-secondary">Konumunuz alınıyor, rota hesaplanıyor…</span>
+            {locationExplain && userLoc.status === 'idle' && (
+              <span className="font-body-sm text-body-sm text-text-secondary">
+                Yalnızca bulunduğunuz yerden ilk durağa olan mesafeyi hesaplamak için kullanılır,
+                hiçbir yerde saklanmaz.
+              </span>
             )}
+            {!locationExplain &&
+              (userLoc.status === 'idle' || userLoc.status === 'loading' || approach.state === 'loading') && (
+                <span className="font-body-sm text-body-sm text-text-secondary">
+                  Konumunuz alınıyor, rota hesaplanıyor…
+                </span>
+              )}
             {userLoc.status === 'denied' && (
               <span className="font-body-sm text-body-sm text-text-secondary">
                 Konum izni verilmedi; rotayı başlatmak için konum gerekli.
@@ -646,10 +684,10 @@ export function DetailScreen({
             )}
           </div>
         </div>
-        {userLoc.status === 'denied' ? (
+        {userLoc.status === 'denied' || (locationExplain && userLoc.status === 'idle') ? (
           <button
             type="button"
-            onClick={onRequestLocation}
+            onClick={useLocation}
             className="w-full h-12 rounded-xl bg-plan-a hover:bg-primary-strong text-on-primary font-label-md text-label-md flex items-center justify-center gap-space-xs"
           >
             <Icon name="my_location" className="text-[18px]" />

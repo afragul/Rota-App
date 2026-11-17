@@ -27,7 +27,7 @@ Sistem bu tercihlere göre:
 
 - Konum bazlı mekân arama (Google Places "New" API)
 - Anlık hava durumu (Open-Meteo)
-- Şehir/adres adından koordinat çözümleme (Google Geocoding API) — `/plan` isteğinde `latitude`/`longitude` yerine `city` de verilebilir
+- Şehir/adres adından koordinat çözümleme (Google Geocoding API) — `/plan` isteğinde `latitude`/`longitude` yerine `city` de verilebilir. İstek `region=tr` biası taşır: aynı isimli yerlerde (ör. "Alsancak" hem İzmir'de hem Kıbrıs'ta var) Türkiye'dekini öne çıkarır — yurt dışı bir adres yine çözümlenir, sadece belirsizlikte öncelik Türkiye'ye verilir
 - Hava durumuna göre kural bazlı indoor/outdoor daraltma: yağış/fırtına kodlarında sadece açık havada anlamlı temalar (`acik_hava`) mekan aramasından önce elenir, iyi havada karma kalır (`app/core/themes.py::filter_for_bad_weather`, `app/services/weather.py::is_bad_weather`)
 - Duraklar arası mesafe/süre/harita çizgisi ve **adım adım tarif** (Türkçe talimat; toplu taşımada hat/durak bilgisi), ulaşım şekli kullanıcı seçimli: yürüyüş, toplu taşıma, araba (Google Routes API, `PlanAlternative.legs[].steps`)
 - Kullanıcının konumundan ilk durağa rota (`POST /route/approach`) ve frontend'de canlı navigasyon modu ("Rotayı Başlat"): konum plan çıktıktan sonra, plan detayında istenir
@@ -132,6 +132,43 @@ Model değiştirince `alembic revision --autogenerate -m "açıklama"` ile yeni 
 Birden çok `api` kopyası çalıştıracaksan migration'ı ayrı bir adım olarak çalıştırıp
 kopyalarda `RUN_MIGRATIONS=false` ver (iki kopya aynı anda migration çalıştırmamalı).
 Testler bellekte SQLite kullanır, Postgres gerekmez.
+
+#### Yedekleme ve geri yükleme (test edildi)
+
+Aşağıdaki adımlar yerel bir `db` konteynerinde gerçekten denendi (gerçek kullanıcı
+kaydı → yedek → `drop schema public cascade` ile tam veri kaybı simülasyonu →
+geri yükleme → `/auth/login` ile API üzerinden doğrulama): sırayla çalışıyor.
+
+**Yedek al** (`-F c`: pg_restore'un anladığı sıkıştırılmış özel format):
+```bash
+docker compose exec db pg_dump -U rota -d rota -F c -f /tmp/rota_backup.dump
+docker compose cp db:/tmp/rota_backup.dump ./rota_backup.dump
+```
+
+**Geri yükle** (var olan tabloları düşürüp yedekten yeniden kurar — `db` servisi
+ayakta ve boş/bozuk olabilir, önemli değil):
+```bash
+docker compose cp ./rota_backup.dump db:/tmp/restore.dump
+docker compose exec db pg_restore -U rota -d rota --clean --if-exists /tmp/restore.dump
+```
+
+Notlar:
+- `pgdata` volume'u TEK BAŞINA yedek değildir (konteyner/volume silinirse o da gider);
+  yukarıdaki `.dump` dosyasını konteynerin dışına, düzenli olarak alıp güvenli bir
+  yere (ayrı bir disk/bulut depolama) koymak gerekir. Canlıda bu otomatik
+  (cron/zamanlı görev) olmalı — şu an elle.
+- `--clean --if-exists`: geri yükleme önce mevcut nesneleri düşürür, yani hedef
+  veritabanı boş olmak zorunda değil; var olan (bozuk/eski) veriyle çakışmaz.
+- Migration geri alma (`alembic downgrade`) ile pg_dump geri yüklemesi FARKLI
+  şeyler: `downgrade` şemayı bir önceki migration'a döndürür ama bozulan/silinen
+  VERİYİ geri getirmez (bir migration veri de siliyorsa downgrade o veriyi
+  geri yazmaz). Gerçek veri kaybında tek güvenilir yol pg_dump geri yüklemesidir;
+  `alembic downgrade` yalnızca "bu migration'ı hiç uygulamamış olsaydım" şemasını
+  verir. CI zaten her migration'ın `downgrade base` + yeniden `upgrade head` ile
+  geri alınabildiğini doğruluyor (bkz. `.github/workflows/ci.yml`), ama bu şema
+  için, veri için değil.
+- Canlıda otomatik yedek sıklığı/saklama süresi ve ayrı bir diskte/bulutta tutma
+  henüz kararlaştırılmadı (bkz. ROADMAP.md).
 
 ## Çalıştırma
 
@@ -265,9 +302,10 @@ Vite `http://localhost:5173`'te açılır, `/api/*` istekleri backend'e
 (`http://localhost:8000`) proxy'lenir (bkz. `frontend/vite.config.ts`) —
 backend'in de ayrıca `fastapi dev app/main.py` ile ayakta olması gerekir.
 
-Lint ve tip kontrolü:
+Test, lint ve tip kontrolü:
 
 ```bash
+npm test
 npm run lint
 npx tsc -b --noEmit
 ```

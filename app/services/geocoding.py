@@ -30,6 +30,10 @@ async def geocode_address(address: str) -> GeocodeResult:
     params = {
         "address": address,
         "language": "tr",
+        # Türkiye içindeki aynı isimli yerler (örn. "Alsancak" hem İzmir'de hem
+        # Kıbrıs'ta) region biası olmadan yanlış sonuca gidebiliyor; bu sadece
+        # bir öncelik ipucu (ccTLD), gerçek dışı bir kısıtlama değil.
+        "region": "tr",
         "key": settings.geocoding_api_key.get_secret_value(),
     }
 

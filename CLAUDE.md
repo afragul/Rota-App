@@ -75,10 +75,30 @@ npm install
 npm run dev      # Vite dev server at :5173, proxies /api/* to the backend at :8000
 npm run build    # tsc -b && vite build
 npm run lint      # oxlint
-npm test          # Vitest (saf mantık: api.ts, prefs.ts, nav.ts, geo.ts, meta.ts, guestLimit.ts, authErrors.ts)
+npm test          # Vitest (saf mantık + App.tsx bileşen testi, bkz. aşağı)
 npx tsc -b --noEmit   # type-check without emitting
 ```
-The frontend has a small Vitest suite (`src/*.test.ts`, `npm test`, also run in CI) that covers pure logic and `api.ts` with a stubbed `fetch`; there are no component/DOM tests (no jsdom) and `auth.ts` is covered by `auth.test.ts` (module reloaded per test with stubbed `localStorage`/`window`/`navigator`/`fetch` and fake timers; `getSession()`/`isAuthLoading()` exist so non-React code and tests can read the store). Vitest 5 needs Node ≥ 22: on an older local Node a failing test crashes the reporter with `Map.groupBy is not a function`. `meta.test.ts` also checks `THEME_TYPES` against `app/core/themes.py`, so editing one without the other fails the test. The frontend needs no env vars. The dev
+The frontend has a Vitest suite (`src/*.test.ts(x)`, `npm test`, also run in CI). Most
+files (`api.ts`, `prefs.ts`, `nav.ts`, `geo.ts`, `meta.ts`, `guestLimit.ts`,
+`authErrors.ts`, `planStorage.ts`) are pure-logic, no DOM, run in Vitest's default
+`node` environment (faster). `auth.ts` is covered by `auth.test.ts` (module reloaded
+per test with stubbed `localStorage`/`window`/`navigator`/`fetch` and fake timers;
+`getSession()`/`isAuthLoading()` exist so non-React code and tests can read the store).
+`App.test.tsx` is the one component test: `jsdom` + `@testing-library/react` (+
+`jest-dom`, `user-event`), opted into per-file via a `// @vitest-environment jsdom`
+comment at the top (other test files stay on the faster default `node` env). It
+renders the real `<App />` to verify the reload/reopen plan-restore flow
+(`planStorage.ts` wiring) end-to-end; `view` never reaches `'detail'` with real stops
+in these tests, so `DetailScreen`'s Leaflet map (`RouteMap.tsx`) never actually mounts
+(`L.map()` is never called) — no real map gets rendered under jsdom. `window.matchMedia`
+and `window.scrollTo` aren't implemented by jsdom and must be stubbed per test.
+`@testing-library/react` has no automatic cleanup here (no global setup file), so
+`afterEach` must call `cleanup()` itself — otherwise a previous test's `<App />` stays
+mounted and its `saveState` effect can refill `localStorage` after the next test's
+`localStorage.clear()`. Vitest 5 needs Node ≥ 22: on an older local Node a failing test
+crashes the reporter with `Map.groupBy is not a function`. `meta.test.ts` also checks
+`THEME_TYPES` against `app/core/themes.py`, so editing one without the other fails the
+test. The frontend needs no env vars. The dev
 proxy (`frontend/vite.config.ts`) means the backend must also be running
 (`fastapi dev app/main.py`) for `/api/*` calls to resolve; account features
 additionally need the database (see "Database" below).
@@ -162,6 +182,22 @@ exceptions into `HTTPException`s; all real logic lives in services.
   responses are still validated defensively) and fills each stop's
   name/latitude/longitude from the pool.
   `PlannerServiceError` covers both call failures and empty/invalid results.
+  **`_SYSTEM_FILLED` must list every field the system fills in after the LLM
+  call** (currently `DayPlan`: `weather_available`/`weather`/`place_pool`;
+  `PlanAlternative`: `legs`/`routes_available`) — this bit the app for real:
+  `place_pool` was added to `DayPlan` during the Supabase→Postgres migration
+  but never added here, so the full place pool (with the `Place` schema) got
+  embedded in the prompt as something the model was expected to also produce,
+  and Groq's `json_object` mode started failing validation on most calls
+  (`json_validate_failed`, empty `failed_generation`) — `/plan` returned 502
+  almost every time. `test_llm_semasi_sistemin_doldurdugu_alanlari_icermez`
+  is the regression test; add any new system-filled field to both places.
+  `create_plan`'s retry (`MAX_ATTEMPTS=2`) now also covers Groq failing the
+  call outright, not just returning too few alternatives — even after the
+  schema fix, Groq occasionally still fails `json_object` validation (a
+  real, observed, provider-side rate, not something this app controls); a
+  bad first attempt now gets a second try within the same cost budget rather
+  than surfacing immediately as a 502.
 - [app/services/routes.py](app/services/routes.py) wraps the Google Routes
   API (`computeRoutes`) for distance/duration/polyline and turn-by-turn
   steps. [app/api/routes/route.py](app/api/routes/route.py) exposes it two
