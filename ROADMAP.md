@@ -415,6 +415,13 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   bu istekler backend'e uğruyor, yani kimlik (`sub`) ile loglanabilirler; ama
   kimlik/audit log'u henüz yazılmıyor. Uvicorn erişim log'unun
   proxy arkasında doğru istemci IP'sini yazdığı doğrulanmalı.
+- [ ] **Log saklama süresi ve Docker log döndürme (sunucuya geçerken)**: karar: barındırıcı
+  seçilince birlikte ele alınacak. Şu an loglar yalnızca stdout'a gidiyor; Docker
+  varsayılanında konteyner ömrü boyunca ve sınırsız tutulur (`docker-compose.yml`'da
+  `logging` ayarı yok, disk dolabilir). Yapılacak: üst süre belirle (ör. 30 gün, hukuki
+  danışmanla), `max-size`/`max-file` ile döndürme, süreyi aydınlatma metnindeki
+  "Ne kadar saklıyoruz?" bölümüne yaz. Loglarda IP, istek yolu ve (temizlenmiş) şehir/adres
+  metni var; koordinat, token, şifre, LLM yanıtı yok.
 - [x] **Log'a girenlerin temizlenmesi** (yapıldı: `clean_log`, koordinat ve LLM yanıt alıntısı artık loglanmıyor; **açık:** log saklama süresi). Eski not: kullanıcı metni (`geocoding.py` adres,
   `orchestrator.py` şehir) satır sonu karakterleri temizlenerek yazılmalı (log
   injection); koordinatlar (`weather.py`, `orchestrator.py`) ve LLM yanıtından
