@@ -56,7 +56,7 @@ gereksiz turlarla yorma."""
 # Sistemin doldurduğu, LLM'in üretmediği alanlar: şemada göstermek hem gereksiz hem de
 # prompt token'ını şişiriyor (Groq'ta dakikalık token kotası dar).
 _SYSTEM_FILLED = {
-    "DayPlan": ["weather_available", "weather"],
+    "DayPlan": ["weather_available", "weather", "place_pool"],
     "PlanAlternative": ["legs", "routes_available"],
 }
 
@@ -197,17 +197,28 @@ async def create_plan(
 
     Model bazen prompt'a rağmen tek alternatif döndürüyor; MIN_ALTERNATIVES'ın
     altında kalırsa bir kez daha denenir. Yine de azsa eldeki plan döner
-    (hiç plan dönmemesinden iyidir).
+    (hiç plan dönmemesinden iyidir). Groq ara sıra json_object modunda bile
+    geçersiz/boş bir yanıt üretebiliyor (sağlayıcı tarafı, ölçülen gerçek
+    oran: birkaç denemeden biri) — bu da aynı deneme bütçesi içinde (ekstra
+    Groq çağrısı eklemeden) yeniden denenir, ilk denemede hemen pes edilmez.
     """
     best: DayPlan | None = None
+    last_error: PlannerServiceError | None = None
     for attempt in range(1, MAX_ATTEMPTS + 1):
-        plan = await _generate_plan(request, places, weather_summary)
+        try:
+            plan = await _generate_plan(request, places, weather_summary)
+        except PlannerServiceError as exc:
+            last_error = exc
+            logger.warning("Plan üretimi başarısız (deneme %d/%d): %s", attempt, MAX_ATTEMPTS, exc)
+            continue
         if best is None or len(plan.alternatives) > len(best.alternatives):
             best = plan
         if len(best.alternatives) >= MIN_ALTERNATIVES:
             break
         logger.warning("Yalnızca %d alternatif geldi (deneme %d)", len(best.alternatives), attempt)
-    assert best is not None
+    if best is None:
+        assert last_error is not None
+        raise last_error
     return best
 
 

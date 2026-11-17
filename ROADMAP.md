@@ -5,6 +5,7 @@ Backend önce tamamlanıp sonra frontend'e geçilecek şekilde sıralandı. READ
 ## Milestone 1 — Backend'i tamamla
 
 - [x] **Şehir/adres → koordinat çözümleme**: `/plan` artık `latitude`/`longitude` ikilisi yerine `city` de kabul ediyor (`app/services/geocoding.py`, Google Geocoding API). `GEOCODING_API_KEY` bunun için kullanılıyor. Bağımsız test için `GET /geocode` eklendi.
+  - **[x] 2026-11-17 düzeltme — aynı isimli yer karışması**: "Alsancak" yazınca İzmir'deki değil Kıbrıs'taki (Girne) Alsancak'a gidiyordu (region biası yoktu, Google ilk sonucu seçiyordu). Ücretsiz çözüm: `geocode_address` isteğine `region=tr` eklendi (yalnızca öncelik ipucu, kısıtlama değil) — gerçek API'yle doğrulandı, artık düz "Alsancak" İzmir/Konak'ı buluyor. **Açık/bilinçli trade-off:** bu, gerçekten yurt dışına plan yapan birinin aynı isimli yabancı bir adresini de Türkiye'ye kaydırabilir; yazarken açılır öneri listesi (Google Places Autocomplete, ücretli) daha doğru bir çözüm ama şimdilik ücretsiz olanla devam edildi.
 - [x] **Hava durumuna göre kural bazlı indoor/outdoor ağırlıklandırma**: `app/services/weather.py::is_bad_weather` yağış/fırtına kodlarını işaretliyor, `app/core/themes.py::filter_for_bad_weather` kötü havada `acik_hava` temasını mekan aramasından önce eliyor (`orchestrator.py::build_day_plan`). Not: bu artık hava sonucunun mekan aramasından önce beklenmesini gerektiriyor — hava/mekan paralel çekimi kayboldu, tema çözümleme (LLM) ile hava paralel kaldı. Ayrıca `_weather_summary`'deki `weather.description` (var olmayan alan) hatası `weather.condition` olarak düzeltildi.
 - [x] **Rota/harita verisi — pin'ler**: Stitch UI tasarımı incelenirken fark edildi: haritada pin basmak için bile `PlanStop`'ta koordinat yoktu. `PlanStop`'a `name`/`latitude`/`longitude` eklendi; LLM bunları üretmiyor (null bırakıyor), `planner.py::_validate_and_enrich_stops` doğrulanmış mekan havuzundan dolduruyor.
 - [x] **Rota/harita verisi — çizgi**: `PlanAlternative.legs` ardışık duraklar arası ayakları (`travel_mode`, `distance_meters`, `duration_minutes`, encoded `polyline`) taşıyor. Ulaşım şeklini kullanıcı seçiyor: `PlanRequest.travel_mode` (`WALK` varsayılan, `TRANSIT`, `DRIVE`). `app/services/routes.py` Google Routes API'yi (`computeRoutes`) çağırıyor: `WALK`/`DRIVE` için alternatif başına tek istek, `TRANSIT` intermediates desteklemediği için ardışık çift başına ayrı istek. `orchestrator.py::build_day_plan` planı kurduktan sonra ekliyor. Rota kritik değil: servis çökerse `legs` boş kalır, plan yine döner.
@@ -325,11 +326,53 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   yazılıyordu. Artık yalnızca hata türü ve durum kodu loglanıyor; regresyon
   testi `tests/test_geocoding_service.py::test_hata_logunda_api_key_gecmez`.
   Places/Routes key'i header'da, Groq SDK ile gittiği için etkilenmiyordu.
-- [ ] **Sırların yönetimi**: `.env` git'te değil (`.gitignore`; git geçmişinde
-  de yok, kodda sabit anahtar yok, anahtarlar `SecretStr`), ama yayın
-  ortamında ortam değişkeni/secret manager kullanılacak (Dockerfile yazılırken
-  `.dockerignore` ile `.env` imaja girmemeli); sızmış olabilecek anahtarlar
-  yenilensin; CI kurulunca commit'lerde sır taraması (ör. `gitleaks`).
+- [x] **Sır taraması (gitleaks)**: `.github/workflows/ci.yml`'e `gitleaks/gitleaks-action@v2`
+  job'u eklendi (push/PR'daki yeni commit'leri tarar, tüm geçmişi değil).
+  Lokal Docker ile tam geçmiş (`--all`) taranarak doğrulandı: gerçek bir anahtar/sır
+  bulunamadı. 3 "sahte test/CI JWT_SECRET'i" yanlış pozitifi `.gitleaksignore`'a
+  fingerprint'leriyle eklendi (örn. `ci.yml`'deki `ci-icin-sahte-jwt-anahtari`).
+  1 bulgu daha var (`frontend/dist/...js` içinde eski bir Supabase anon JWT) ama bu
+  yalnızca lokal bir `git stash`'te (`refs/stash`) — hiç GitHub'a pushlanmadı, CI'ın
+  gördüğü geçmişte yok, görmezden gelinebilir (temizlemek istenirse `git stash list`).
+  **Resend API anahtarı sızdı mı sorusu bu taramayla da netleşti:** repoda (ne
+  committed dosyalarda ne git geçmişinde, stash dahil) gerçek bir Resend anahtarının
+  izi yok — gerçek anahtar (varsa) yalnızca onu test eden kişinin kendi `.env`'inde
+  durmuş olmalı, bu repoya hiç girmemiş. Yine de emin olmak maliyetsiz olduğu için
+  Resend panelinden o anahtarın iptal edilip yenisinin üretilmesi öneriliyor —
+  bu adım kod dışı, hesaba erişimi olan kişi tarafından yapılmalı.
+- [ ] **Sırların yönetimi (geri kalan)**: `.env` git'te değil (`.gitignore`;
+  git geçmişinde de yok, kodda sabit anahtar yok, anahtarlar `SecretStr`), ama
+  yayın ortamında ortam değişkeni/secret manager kullanılacak (Dockerfile
+  yazılırken `.dockerignore` ile `.env` imaja girmemeli).
+- [ ] **Üçüncü taraf ToS uyumluluğu (2026-11-17, henüz karar verilmedi)**:
+  canlıya/gerçek kullanıcıya açmadan önce gözden geçirilmeli, düşük trafikte
+  risk düşük ama büyüdükçe artıyor (ihlal = dava değil, erişimin kesilmesi):
+  - **Google Maps Platform + Leaflet/OSM birlikteliği**: Google ToS'unun geçmiş
+    sürümlerinde Places/Routes (Directions) içeriğinin Google-dışı bir haritada
+    (Leaflet/OSM) gösterilemeyeceğine dair bir madde var; güncel metin canlı
+    sayfadan (`cloud.google.com/maps-platform/terms/maps-service-terms`) doğrulanamadı
+    (sayfa JS ile render ediliyor, otomatik çekilemedi) — tarayıcıda elle
+    kontrol edilmeli. Mimarimiz tam bu kalıba giriyor: `RouteMap.tsx`/`NavMap.tsx`
+    Leaflet/OSM karosu üzerine Places mekanlarını ve Routes rota çizgisini basıyor.
+    Madde hâlâ geçerliyse iki seçenek var, ikisi de mimariyi/bütçeyi değiştirir:
+    (a) Leaflet'i Google Maps JS API ile değiştirmek, (b) Places/Routes'u
+    Google-dışı bir kaynakla değiştirmek (örn. Nominatim/Overpass + OSRM).
+  - **Google verisi saklama**: `favorite_places`/`visited_places` tabloları
+    `place_id`'nin yanında ad/adres/koordinatı da süresiz saklıyor; ToS'un bu
+    alanlar için süre sınırı olup olmadığı da aynı sebeple doğrulanamadı. Eğer
+    sınır varsa kod tarafında yalnızca `place_id` saklanıp gösterimde Place
+    Details ile yeniden çekmek gerekebilir (ek ücretli çağrı demek).
+  - **OSM tile politikası — doğrulandı**: `operations.osmfoundation.org/policies/tiles`
+    canlı sayfası okundu — yoğun/ticari trafikte bildirimsiz erişim kesilebileceği,
+    bunun yerine ücretli bir sağlayıcı (MapTiler/Stadia Maps/Mapbox/Jawg) veya
+    kendi sunucunun önerildiği doğrulandı. Kodda da doğrulandı: `NavMap.tsx:30`
+    ve `RouteMap.tsx:22` hâlâ çıplak `tile.openstreetmap.org`'a istek atıyor.
+    Canlıya açmadan önce bir sağlayıcıya geçilmeli (CSP `img-src` de buna göre).
+  - **Groq**: groq.com/terms-of-use API'yi kapsamıyor ("These Terms do not apply
+    to you in connection with your use of Groq's cloud services") — asıl
+    sözleşme console hesabında kabul edilen "Groq Services Agreement" (herkese
+    açık değil); ticari kullanım/veri saklama/kota maddeleri oradan kontrol
+    edilmeli.
 
 ### Yayın için gerekli altyapı
 
@@ -488,11 +531,20 @@ yazılmalı; yurt dışına aktarım şartları hukuken değerlendirilmeli.
   - `HOSTING`: barındırıcı ve sunucunun ülkesi (barındırma kararı verilince).
   Ayrıca metin hukukçuya gösterilmeli ve log saklama süresi netleşince
   "Ne kadar saklıyoruz?" bölümüne eklenmeli.
-- [ ] **Konum için bilgilendirme/rıza metni**: şehir yazarak plan, cihaz
-  konumu (navigasyon) ve ziyaret geçmişi ayrı ayrı anlatılsın; konumun açık
-  rıza gerektirip gerektirmediği hukuki olarak netleştirilsin. Tarayıcı konum
-  izni isteminden önce kısa bir açıklama gösterilsin. (Ana ekranda kısa not ve
-  gizlilik metnine bağlantı var; ayrı rıza metni yok.)
+- [x] **Tarayıcı konum izninden önce kısa açıklama** (arayüz kısmı yapıldı):
+  `DetailScreen.tsx` artık detay ekranı açılır açılmaz konumu otomatik istemiyor.
+  Önce `navigator.permissions.query({name:'geolocation'})` ile mevcut izin
+  durumuna bakıyor: zaten verilmiş/reddedilmişse (tarayıcı zaten karar vermiş,
+  yeniden sormak anlamsız) doğrudan ister; durum `"prompt"` ise (ya da
+  Permissions API desteklenmiyorsa) tarayıcı diyaloğu açılmadan önce kısa bir
+  açıklama kartı gösterir ("yalnızca ilk durağa olan mesafeyi hesaplamak için
+  kullanılır, hiçbir yerde saklanmaz") + "Konumumu Kullan" düğmesi; diyalog
+  ancak buna basınca açılır.
+- [ ] **Konum için bilgilendirme/rıza metni (hukuki kısım açık)**: şehir
+  yazarak plan, cihaz konumu (navigasyon) ve ziyaret geçmişi ayrı ayrı
+  anlatılsın; konumun açık rıza gerektirip gerektirmediği hukuki olarak
+  netleştirilsin. (Ana ekranda kısa not ve gizlilik metnine bağlantı var;
+  ayrı/resmi bir rıza metni hâlâ yok — bu bir hukukçu kararı.)
 - [ ] **Silme hakkı**: hesap silme akışı (`users`, `saved_plans`,
   `favorite_places`, `visited_places`, `refresh_tokens`). **Backend yapıldı:**
   `DELETE /me` (şifre doğrulamalı, tek işlemde hepsini kalıcı siler — soft
@@ -520,27 +572,74 @@ yazılmalı; yurt dışına aktarım şartları hukuken değerlendirilmeli.
   şartları/DPA incelenmeli; Groq'a giden kullanıcı serbest metninin
   eğitimde kullanılmadığı ayarı doğrulanmalı.
 - [ ] **Çocuklar**: yaş sınırı ve ebeveyn onayı gerekliliği değerlendirilmeli.
-- [x] **Frontend testleri** (kısmen): Vitest kuruldu (`npm test`, CI'da ayrı adım).
-  64 test: `api.ts` (sahte `fetch`: hata/limit bayrakları, 401 kancası, iptal),
+- [x] **Frontend testleri**: Vitest kuruldu (`npm test`, CI'da ayrı adım).
+  104 test (74 saf mantık + 25 `auth.ts` + 5 `App.tsx` bileşen testi, aşağıya bkz).
+  Saf mantık: `api.ts` (sahte `fetch`: hata/limit bayrakları, 401 kancası, iptal),
   `prefs.ts`, `nav.ts`, `geo.ts`, `meta.ts`, `guestLimit.ts`, `authErrors.ts`
   (`authErrorText` bu yüzden `AccountScreen`'den ayrı dosyaya taşındı). `meta.test.ts`
   ayrıca frontend `THEME_TYPES`'ının backend `themes.py` ile birebir aynı olduğunu
   doğrular. `auth.ts` da testli (`auth.test.ts`, 25 test: açılışta sessiz geri kazanma, süre dolmadan
   yenileme, 401/ağ hatası, başka sekmeyle senkron, görünürlük, giriş/çıkış/hesap silme).
-  **Açık:** bileşen/ekran testi yok (jsdom + Testing Library gerekir); plan akışının
-  uçtan uca testi yok; Web Locks gerçek tarayıcıda iki sekmeyle elle denenmedi
-  (testte kilit sahte).
-- [x] **Sayfa yenilenince ekran ve plan kayboluyordu** (yapıldı): son plan, tercihler ve
-  açık ekran (sonuçlar ya da plan detayı) `localStorage`'a yazılıyor
-  (`frontend/src/planStorage.ts`), açılışta geri yükleniyor. Plan üretildikten 12 saat
-  sonra geçersiz (süre yenilemeyle uzamaz); bozuk/eski sürüm kayıt yok sayılır. Bilerek
-  çıkış yapınca ve hesap silinince hem cihazdan hem ekrandan silinir (süresi dolan
-  oturumda silinmez). Gizlilik metnine eklendi. **Açık:** `App.tsx` bağlantısı tarayıcıda
-  elle denenmedi (bileşen testi yok); "Ulaşıldı" işaretleri ve konum izni yenilemede
-  sıfırlanır (kasıtlı: yalnızca plan/tercih/ekran saklanıyor).
-- [ ] **LLM çıktı kalitesi**: planların Türkçe dönmesi prompt'ta zorlandı
-  ama rastgele kayma tamamen ölçülmedi; birkaç gerçek çıktıyla kontrol, gerekirse
-  `temperature` düşürme.
+  **Açık:** Web Locks gerçek tarayıcıda iki sekmeyle elle denenmedi (testte kilit sahte).
+- [x] **Ekran/bileşen testi (jsdom + Testing Library)**: `jsdom`,
+  `@testing-library/react`, `@testing-library/jest-dom`, `@testing-library/user-event`
+  eklendi (yalnızca `src/App.test.tsx`'te `// @vitest-environment jsdom` ile devreye
+  giriyor — diğer testler hâlâ varsayılan `node` ortamında, daha hızlı). `App.test.tsx`
+  (5 test) tam olarak sayfa yenileme/plan geri yükleme akışını (az önceki madde) gerçek
+  `<App />` render ederek doğruluyor: misafir + geçerli kayıt → doğrudan sonuç ekranı
+  (konum ekranına düşülmüyor); kayıt yok → konum ekranı; bozuk/eski sürüm kayıt →
+  çökme yok, konum ekranına düşer; 12 saatten eski kayıt → geçersiz sayılır; `detail`
+  görünümünden kaydedilmiş bir plan → doğru alternatifin detayına döner (sonuç
+  listesine değil). `DetailScreen`/Leaflet testlerde hiç mount olmuyor (view hep
+  `results`'ta kalıyor), o yüzden `L.map()` jsdom'da hiç çağrılmıyor — gerçek bir
+  harita render riski yok. `window.matchMedia`/`scrollTo` jsdom'da yok, testte
+  sahteleniyor; `@testing-library/react`'in otomatik cleanup'ı olmadığı için
+  `afterEach(cleanup)` şart (yoksa önceki testin `App`'i mount'ta kalıp
+  `localStorage.clear()`'ı geçersiz kılıyor).
+- [x] **Gerçek bir güvenilirlik hatası bulundu ve düzeltildi**: gerçek çıktılarla
+  kontrol ederken `/plan` neredeyse her zaman 502 ("Plan servisi yanıt vermedi")
+  dönüyordu. Sebep: `DayPlan.place_pool` (Supabase→Postgres geçişinde eklenen,
+  tamamen sistemin doldurduğu bir alan) `app/services/planner.py::_SYSTEM_FILLED`'e
+  hiç eklenmemişti — LLM'e gönderilen JSON şemasına tüm mekan havuzunu (`Place`
+  tanımıyla) da üretmesi gerekiyormuş gibi giriyordu, model bunu üretmeye
+  çalışırken geçersiz JSON'a düşüyordu. Düzeltme: `place_pool`'u `_SYSTEM_FILLED`'e
+  ekledik (şema ~%28 küçüldü, `Place` $defs'ten düştü); ayrıca `create_plan`'ın
+  deneme bütçesi artık yalnızca "az alternatif" durumunda değil, Groq'un
+  tamamen başarısız olduğu durumda da (ekstra çağrı eklemeden, aynı
+  `MAX_ATTEMPTS` içinde) yeniden deniyor. Regresyon testleri:
+  `tests/test_planner_llm.py::test_llm_semasi_sistemin_doldurdugu_alanlari_icermez`
+  (artık `place_pool`/`user_rating_count` de kontrol ediyor) ve
+  `test_create_plan_ilk_deneme_basarisizsa_ikincide_toparlanir`.
+- [ ] **LLM çıktı kalitesi (ölçüm hâlâ açık)**: düzeltmeden sonra bile Groq
+  ara sıra (gözlemlenen oran: birkaç denemeden biri) `json_object` modunda
+  geçersiz/boş yanıt üretiyor — bu muhtemelen sağlayıcı/model tarafı bir
+  tutarsızlık, tamamen giderilemedi, yalnızca retry ile tolere ediliyor.
+  Planların Türkçe dönmesi prompt'ta zorlandı ama rastgele kayma (konu dışı
+  öneri, tutarsız süre vb.) tamamen ölçülmedi; birkaç gerçek çıktıyla daha
+  kontrol, gerekirse `temperature` (şu an 0.8) düşürme denenebilir.
+- [ ] **Dil tutarlılığı ve "sadece Türkiye için mi?" sorusu (2026-11-17,
+  Afragül'den gelen soru, henüz yapılmadı)**: kod incelendi, bulgular:
+  - **Yalnızca Türkiye'ye özel değil, ama tüm metin çıktısı Türkçe'ye sabit.**
+    Konum/hava/mekan/rota API'leri (Google Places/Geocoding/Routes, Open-Meteo)
+    koordinat tabanlı ve dünyanın her yerinde çalışıyor — bu yüzden fonksiyonel
+    olarak uygulama herhangi bir şehir için plan kurabiliyor. Ama görünen metin
+    her zaman Türkçe, dile bakılmaksızın: `planner.py::SYSTEM_INSTRUCTION`
+    LLM'e "Tüm metin alanlarını ... TÜRKÇE yaz" diye talimat veriyor (koşulsuz);
+    `places.py` (x2) ve `routes.py` (x2) `languageCode: "tr"` sabit (mekan adı/adres,
+    adım adım yol tarifi hep Türkçe gelir); `weather.py::WEATHER_CODES` hava durumu
+    açıklamasını Türkçe sabit bir sözlükten okuyor. `PlanRequest`'te bir `language`
+    alanı yok, frontend'de de bir dil seçici yok — yani şu an "siteye İngilizce
+    eklenirse" diye bir dal zaten çalışmaz, hepsi sabit Türkçe'ye kodlanmış.
+  - **Küçük bir ek nüans**: hesap günlük kota sıfırlanması Türkiye saatine
+    (sabit UTC+3) göre — yurt dışından kullanan biri için "gün" yanlış saatte
+    döner (işlevi bozmaz, küçük bir UX tutarsızlığı).
+  - **Afragül'ün istediği davranış** ("Türkçe seçiliyse Türkçe, ek istek olmadıkça;
+    İngilizce eklenirse İngilizce") şu an koda yansımıyor çünkü dil hiç
+    parametre değil — yapılacaksa `PlanRequest.language` eklenip
+    `orchestrator.py` → `planner.py` (prompt'taki "TÜRKÇE yaz" satırı dinamik
+    olmalı) → `places.py`/`routes.py`/`geocoding.py`'deki `languageCode`/`language`
+    → frontend'de arayüz dili seçici kadar uçtan uca bir iş; henüz yapılmadı,
+    yalnızca not edildi.
 
 ## Milestone 5 — Supabase'ten kendi PostgreSQL'imize geçiş
 
@@ -613,7 +712,16 @@ Eski Supabase kullanıcıları taşınmadı (sıfırdan başlandı).
 - [ ] **Tüm cihazlardan çıkış** düğmesi (backend `revoke_all_for_user` hazır).
 - [ ] **Frontend'in oturum mantığı tarayıcıda otomatik test edilmiyor**
   (`auth.ts` zamanlayıcı/sekme senkronu, hesap silme/şifre sıfırlama formları elle denenmeli).
-- [ ] **Migration öncesi yedek ve geri alma (downgrade) prosedürü** yok.
+- [x] **Yedek ve geri yükleme — gerçek Postgres'te denendi (2026-11-17)**:
+  `pg_dump -F c` + `pg_restore --clean --if-exists` ile tam bir döngü denendi
+  (gerçek kullanıcı kaydı → yedek al → `drop schema public cascade` ile tam veri
+  kaybı simülasyonu → geri yükle → `/auth/login` ile API üzerinden doğrulama,
+  sorunsuz çalıştı). Komutlar ve notlar README.md "Yedekleme ve geri yükleme"
+  bölümünde. **Açık kalan:** bu tek seferlik elle bir deneme — canlıda düzenli
+  (ör. günlük) otomatik yedek + ayrı bir yerde/diskte saklama henüz kurulmadı
+  (yukarıdaki "PostgreSQL canlı ayarları" maddesi); `alembic downgrade` (şema
+  geri alma) bu denemenin KAPSAMI DIŞINDA — pg_dump geri yüklemesi farklı bir
+  şey, downgrade migration'ları hâlâ denenmedi.
 - [ ] **Eski Supabase verisi**: gerçek kullanıcı varsa taşıma yapılmadı.
 - Veri dışa aktarma bilinçli olarak yapılmıyor (karar: hiçbir şekilde).
 

@@ -64,7 +64,7 @@ async def test_baglanti_kurulamayinca():
 
 @respx.mock
 async def test_istek_dogru_kuruluyor():
-    """address, key ve language parametreleri doğru gönderiliyor mu."""
+    """address, key, language ve region parametreleri doğru gönderiliyor mu."""
     route = respx.get(_url()).mock(return_value=httpx.Response(200, json=FAKE_RESPONSE))
 
     await geocode_address("Bursa")
@@ -74,6 +74,7 @@ async def test_istek_dogru_kuruluyor():
 
     assert params["address"] == "Bursa"
     assert params["language"] == "tr"
+    assert params["region"] == "tr"
     assert params["key"]
 
 
