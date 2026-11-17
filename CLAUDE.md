@@ -61,7 +61,7 @@ service tests instead of mocking at the `httpx.AsyncClient` level.
 `.github/workflows/ci.yml` runs on PRs and pushes to `main`: backend (`ruff`,
 `pytest`, Python 3.11 and 3.12), migrations (real Postgres service:
 `alembic upgrade head`, `alembic check`, downgrade/upgrade round-trip) and
-frontend (`npm ci`, lint, `tsc`, build). Run the same commands locally before
+frontend (`npm ci`, lint, `tsc`, `npm test`, build). Run the same commands locally before
 pushing. Two things bit during setup: the frontend needs Node ≥ 20.19 (older
 Node makes `npm ci` silently skip native bindings → "Cannot find native
 binding"), and `app/services/planner.py` has `E501` ignored because its long
@@ -75,9 +75,10 @@ npm install
 npm run dev      # Vite dev server at :5173, proxies /api/* to the backend at :8000
 npm run build    # tsc -b && vite build
 npm run lint      # oxlint
+npm test          # Vitest (saf mantık: api.ts, prefs.ts, nav.ts, geo.ts, meta.ts, guestLimit.ts, authErrors.ts)
 npx tsc -b --noEmit   # type-check without emitting
 ```
-There is no frontend test suite and the frontend needs no env vars. The dev
+The frontend has a small Vitest suite (`src/*.test.ts`, `npm test`, also run in CI) that covers pure logic and `api.ts` with a stubbed `fetch`; there are no component/DOM tests (no jsdom) and `auth.ts` (timers, Web Locks, cross-tab sync) is untested. `meta.test.ts` also checks `THEME_TYPES` against `app/core/themes.py`, so editing one without the other fails the test. The frontend needs no env vars. The dev
 proxy (`frontend/vite.config.ts`) means the backend must also be running
 (`fastapi dev app/main.py`) for `/api/*` calls to resolve; account features
 additionally need the database (see "Database" below).
