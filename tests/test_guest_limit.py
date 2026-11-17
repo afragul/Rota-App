@@ -8,7 +8,7 @@ from app.core.config import get_settings
 
 
 def _fake_request(ip: str = "1.2.3.4"):
-    return SimpleNamespace(client=SimpleNamespace(host=ip))
+    return SimpleNamespace(client=SimpleNamespace(host=ip), url=SimpleNamespace(path="/plan"))
 
 
 @pytest.fixture(autouse=True)

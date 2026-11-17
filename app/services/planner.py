@@ -243,7 +243,8 @@ async def _generate_plan(
     try:
         plan = DayPlan.model_validate_json(content)
     except ValidationError:
-        logger.warning("Groq yanıtı şemaya uymadı: %s", content[:300])
+        # Yanıt kullanıcı notundan alıntı içerebilir: içerik değil yalnızca uzunluğu yazılır.
+        logger.warning("Groq yanıtı şemaya uymadı (%d karakter)", len(content))
         raise PlannerServiceError("Plan yanıtı çözümlenemedi") from None
 
     return _validate_and_enrich_stops(plan, places)

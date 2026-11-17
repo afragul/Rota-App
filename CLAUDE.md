@@ -219,6 +219,23 @@ fans out to several paid Google calls plus a Groq call per request:
   doesn't depend on DB cascade settings; there is no soft delete — KVKK).
   **When you add a table with a `user_id`, add it to
   `services/users.py::delete_account`** or deletion will leave that data behind.
+- **Observability** ([app/core/logging.py](app/core/logging.py),
+  [app/core/request_id.py](app/core/request_id.py),
+  [app/core/audit.py](app/core/audit.py)): every request gets an id
+  (`RequestIdMiddleware`, `X-Request-ID` response header; an incoming one is
+  accepted only if it matches `[A-Za-z0-9_-]{8,64}`, else a fresh uuid) that is
+  stamped on every log line via a contextvar. `LOG_FORMAT=json` switches to one
+  JSON object per line (exception *type* only, never the message — httpx errors
+  can carry URLs with keys). User-supplied text must go through
+  `logging.clean_log()` before being logged (strips newlines → no log
+  injection; truncates), and coordinates / LLM reply text are not logged.
+  Security events go to the `audit` logger via `audit(request, event)` (IP +
+  path only, never a token, password or user id — logging identity is
+  pending the KVKK decision): rate limit exceeded
+  (`rate_limit.rate_limit_exceeded_handler`), guest quota exhausted, and
+  invalid/expired access tokens (INFO, not WARNING: expiry is routine).
+  `/health` is liveness only; `/health/ready` runs `SELECT 1` and answers
+  `503 {"status":"unavailable"}` without detail.
 - [app/core/guest_limit.py](app/core/guest_limit.py)'s
   `enforce_guest_plan_limit` is the server-side backstop for `/plan`'s free
   usage cap (the frontend's `guestLimit.ts` localStorage counter is
