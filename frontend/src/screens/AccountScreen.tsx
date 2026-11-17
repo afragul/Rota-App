@@ -29,6 +29,7 @@ function authErrorText(err: unknown): string {
 interface Props {
   session: Session | null
   onOpenSaved: (id: string) => void
+  onOpenPrivacy: () => void
   /** E-postadaki sıfırlama bağlantısından gelen token (varsa yeni şifre formu açılır). */
   resetToken: string | null
   onResetDone: () => void
@@ -526,7 +527,7 @@ function LoggedInPanel({
 
 // Giriş opsiyonel: uygulama misafir olarak da kullanılabilir, bu ekran sadece
 // hesap oluşturup giriş yapmak isteyenler için (bkz. Shell'deki hesap ikonu).
-export function AccountScreen({ session, onOpenSaved, resetToken, onResetDone }: Props) {
+export function AccountScreen({ session, onOpenSaved, onOpenPrivacy, resetToken, onResetDone }: Props) {
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -701,6 +702,14 @@ export function AccountScreen({ session, onOpenSaved, resetToken, onResetDone }:
       >
         {submitting ? 'Gönderiliyor...' : mode === 'login' ? 'Giriş Yap' : mode === 'register' ? 'Kayıt Ol' : 'Bağlantı gönder'}
       </button>
+
+      <p className="font-body-sm text-body-sm text-text-secondary text-center">
+        {mode === 'register' ? 'Kayıt olarak ' : ''}
+        <button type="button" onClick={onOpenPrivacy} className="text-primary underline">
+          Gizlilik ve Aydınlatma Metni
+        </button>
+        {mode === 'register' ? "'ni okuduğunu onaylarsın." : "'ne göz atabilirsin."}
+      </p>
 
       <button
         type="button"
