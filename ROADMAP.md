@@ -554,10 +554,13 @@ Eski Supabase kullanıcıları taşınmadı (sıfırdan başlandı).
   denemişti (artık `conftest` SMTP_* değerlerini boşa zorluyor).
 
 **Açık:**
-- [ ] **Gerçek e-posta alan adı**: Resend deneme modu yalnızca hesabın kendi
-  adresine gönderir; başkalarına göndermek için alan adı doğrulanmalı (SPF/DKIM) ve
-  `SMTP_FROM` o alan adından olmalı. `FRONTEND_BASE_URL` yayında gerçek adres olmalı.
-- [ ] **Şifre sıfırlama arayüzü ve `starttls` modu**: forgot/reset formları tarayıcıda
+- [ ] **Şifre sıfırlama RAFTA (karar)**: kod duruyor ama bilerek KAPALI (`SMTP_*` boş →
+  `/auth/forgot` 503, arayüz bağlantıyı göstermez). Sebep: e-posta adresi + sıfırlama
+  bağlantısı üçüncü taraf bir sağlayıcıya (Resend, yurt dışı) gidiyor; KVKK yurt dışı
+  aktarım riski. Açmadan önce: yurt içi/AB sağlayıcı seç ve aydınlatma metnine yaz;
+  alan adı doğrula (Resend deneme modu yalnızca hesabın kendi adresine gönderir; SPF/DKIM,
+  `SMTP_FROM` o alan adından, `FRONTEND_BASE_URL` gerçek adres). Yayında `SMTP_*` tanımlama.
+  Açık kalan işler: şifre sıfırlama arayüzü ve `starttls` modu**: forgot/reset formları tarayıcıda
   elle denenmedi; `starttls` yalnızca birim testle (gerçek sunucuyla denenmedi).
 - [ ] **E-posta doğrulama**: yok; kayıt olan herkes e-postası doğrulanmadan
   oturum açıyor (başkasının adresiyle de hesap açılabilir).

@@ -45,7 +45,7 @@ Sistem bu tercihlere göre:
 
 - Konum/tercih seçimi, sonuç ve plan detayı ekranları; açık/koyu tema anahtarı
 - Canlı navigasyon modu, plan detayında durakları sil/sırala/değiştir/taşı/ekle
-- **Hesap** (backend'in kendi auth'u, PostgreSQL): giriş opsiyonel (misafir modu var), kayıt/giriş, kullanıcı adı ve şifre değiştirme, sessiz oturum yenileme, hesabı silme, "şifremi unuttum" (SMTP ayarlıysa; bkz. ortam değişkenleri)
+- **Hesap** (backend'in kendi auth'u, PostgreSQL): giriş opsiyonel (misafir modu var), kayıt/giriş, kullanıcı adı ve şifre değiştirme, sessiz oturum yenileme, hesabı silme, "şifremi unuttum" (kod hazır ama bilerek kapalı: KVKK nedeniyle `SMTP_*` tanımlanmıyor, bkz. ROADMAP)
 - Rota kaydetme/favorileme ve link ile paylaşım (`saved_plans` tablosu, `/plans` ve `/shared/{id}`)
 - Mekan bazlı favorileme (`favorite_places` tablosu, rotadan bağımsız) — plan detayındaki her durakta kalp ikonu, Hesabım'da liste, "+ Durak ekle" sayfasında "Favorilerimden ekle" sekmesiyle herhangi bir rotaya eklenebilir
 - Sık gidilen yerler: "Ulaşıldı" işaretlemeleri `visited_places` tablosuna kalıcı ziyaret sayacı olarak işlenir; ana sayfada en sık gidilen 5 mekan tıklanabilir kart olarak çıkar, tıklanınca o mekan garanti rotaya girer (tercihler yine sorulur)
