@@ -148,6 +148,31 @@ export async function searchPlaces(
   return response.json()
 }
 
+// Bir mekanın GÜNCEL koordinatını anlık çeker (saklanmaz — bkz. favoritePlaces.ts/
+// visitedPlaces.ts: favorite_places/visited_places artık koordinat tutmuyor, Google ToS
+// 30 günlük önbellekleme sınırı yüzünden; bu uç nokta "favorilerimden ekle"/"sık gidilen
+// yeri çapa al" gibi mekanın gerçekten KULLANILACAĞI anda çağrılır).
+export async function fetchPlaceLocation(placeId: string, accessToken?: string): Promise<LatLng> {
+  let response: Response
+  try {
+    response = await fetch(`/api/places/${encodeURIComponent(placeId)}/location`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err
+    throw new ApiError(0, 'Sunucuya ulaşılamadı')
+  }
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      'Mekanın konumu alınamadı',
+      response.headers.get('X-Guest-Limit-Reached') === '1',
+      response.headers.get('X-User-Limit-Reached') === '1',
+    )
+  }
+  return response.json()
+}
+
 // Süresi dolmuş/geçersiz token'la 401 alınınca oturumu kapatmak için auth.ts kaydeder
 // (api.ts auth.ts'i import etmesin diye döngüyü bu kanca kırıyor).
 let unauthorizedHandler: (() => void) | null = null

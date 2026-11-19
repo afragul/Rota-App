@@ -102,6 +102,11 @@ export interface Place {
   types: string[]
 }
 
+// favorite_places/visited_places'in backend karşılığı: koordinat YOK (bkz. api.ts
+// fetchPlaceLocation) — Google ToS 30 günlük önbellekleme sınırı yüzünden backend hiç
+// saklamıyor, dolayısıyla bu iki tablodan dönen mekanlarda da hiç yok.
+export type PlaceWithoutLocation = Omit<Place, 'latitude' | 'longitude'>
+
 export interface DayPlan {
   weather_available: boolean
   weather: WeatherSummary | null

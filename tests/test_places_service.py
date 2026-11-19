@@ -128,3 +128,49 @@ async def test_metin_aramasi_hatada_places_service_error():
 
     with pytest.raises(PlacesServiceError):
         await search_text("kahve", 40.18, 29.06)
+
+
+# --- get_place_location ---
+# favorite_places/visited_places artık koordinat saklamıyor (Google ToS 14.3/19.3,
+# bkz. ROADMAP.md); bir mekan gerçekten kullanılacağı an koordinat buradan anlık çekilir.
+
+
+def _location_url(place_id: str) -> str:
+    return f"{get_settings().google_places_base_url}/places/{place_id}"
+
+
+@respx.mock
+async def test_konum_basariyla_cekilir():
+    from app.services.places import get_place_location
+
+    route = respx.get(_location_url("ChIJ123")).mock(
+        return_value=httpx.Response(
+            200, json={"location": {"latitude": 40.1885, "longitude": 29.0610}}
+        )
+    )
+
+    konum = await get_place_location("ChIJ123")
+
+    assert (konum.latitude, konum.longitude) == (40.1885, 29.0610)
+    # Yalnızca konum alanı istenmeli: en ucuz fiyat katmanında kalınır.
+    assert route.calls.last.request.headers["X-Goog-FieldMask"] == "location"
+
+
+@respx.mock
+async def test_konum_google_hata_dondurunce():
+    from app.services.places import get_place_location
+
+    respx.get(_location_url("ChIJ123")).mock(return_value=httpx.Response(404))
+
+    with pytest.raises(PlacesServiceError):
+        await get_place_location("ChIJ123")
+
+
+@respx.mock
+async def test_konum_beklenmeyen_govdede_places_service_error():
+    from app.services.places import get_place_location
+
+    respx.get(_location_url("ChIJ123")).mock(return_value=httpx.Response(200, json={}))
+
+    with pytest.raises(PlacesServiceError):
+        await get_place_location("ChIJ123")

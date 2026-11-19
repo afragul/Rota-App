@@ -61,6 +61,18 @@ async def test_favori_eklenir_listelenir_ve_cikarilir(client):
     assert (await client.delete("/favorites/ChIJ-abc_1", headers=h)).status_code == 404
 
 
+async def test_favori_kaydinda_koordinat_saklanmaz(client):
+    """Google ToS (Places/Routes 14.3/19.3): koordinat en fazla 30 gün önbelleklenebilir,
+    süresiz saklanamaz — bu yüzden hiç saklamıyoruz. İstek gövdesinde lat/lng gelse bile
+    (frontend zaten dolu bir Place gönderiyor) backend sessizce yok sayar, yanıtta yer almaz."""
+    h = await _giris(client)
+    r = await client.post("/favorites", json=PLACE, headers=h)
+
+    assert "latitude" not in r.json() and "longitude" not in r.json()
+    liste = (await client.get("/favorites", headers=h)).json()
+    assert "latitude" not in liste[0] and "longitude" not in liste[0]
+
+
 async def test_ayni_mekani_tekrar_favorilemek_hata_vermez(client):
     h = await _giris(client)
     ilk = await client.post("/favorites", json=PLACE, headers=h)
@@ -97,8 +109,6 @@ async def test_favori_sayisi_siniri(client, monkeypatch):
     [
         {"place_id": ""},
         {"name": "x" * 201},
-        {"latitude": 91},
-        {"longitude": -181},
         {"rating": 6},
         {"user_rating_count": -1},
         {"types": ["a"] * 11},

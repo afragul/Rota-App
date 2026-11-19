@@ -66,13 +66,17 @@ class SavedPlan(Base):
 
 
 class _PlaceMixin:
-    """favorite_places ve visited_places'in ortak mekan alanları."""
+    """favorite_places ve visited_places'in ortak mekan alanları.
+
+    Enlem/boylam BİLEREK yok: Google Maps Platform ToS'u (Places/Routes API Service
+    Specific Terms 14.3/19.3) koordinatın en fazla 30 gün önbelleklenmesine izin
+    veriyor, süresiz saklamaya değil. Bu yüzden hiç saklamıyoruz — bir mekan gerçekten
+    kullanılacağı an (`app/api/routes/places.py::get_location`) anlık çekiliyor. Ad/adres
+    gibi diğer alanlar bu maddenin kapsamında değil, süresiz saklanabilir."""
 
     place_id: Mapped[str] = mapped_column(Text)
     name: Mapped[str] = mapped_column(Text)
     address: Mapped[str | None] = mapped_column(Text, default=None)
-    latitude: Mapped[float] = mapped_column(Float)
-    longitude: Mapped[float] = mapped_column(Float)
     rating: Mapped[float | None] = mapped_column(Float, default=None)
     user_rating_count: Mapped[int | None] = mapped_column(Integer, default=None)
     types: Mapped[list] = mapped_column(JsonType, default=list, server_default="[]")

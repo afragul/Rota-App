@@ -1,7 +1,9 @@
 import type { Session } from '../auth'
 import { useEffect, useState } from 'react'
+import { fetchPlaceLocation } from '../api'
 import { Icon } from '../components/Icon'
 import { hasLocation, locationLabel, type Preferences } from '../prefs'
+import type { Place } from '../types'
 import { listFrequentPlaces, type VisitedPlace } from '../visitedPlaces'
 
 interface Props {
@@ -11,7 +13,7 @@ interface Props {
   // prefs'i güncelleyip aynı anda devam eden, atomik bir seçim — onChange +
   // onContinue'yu art arda çağırmak prefs'in henüz güncellenmemiş (stale)
   // haliyle onContinue'nun hasLocation kontrolüne takılmasına yol açardı.
-  onPickFrequent: (place: VisitedPlace) => void
+  onPickFrequent: (place: Place) => void
   session: Session | null
   onOpenPrivacy: () => void
 }
@@ -22,11 +24,29 @@ interface Props {
 export function LocationScreen({ prefs, onChange, onContinue, onPickFrequent, session, onOpenPrivacy }: Props) {
   const ready = hasLocation(prefs)
   const [frequent, setFrequent] = useState<VisitedPlace[]>([])
+  // visited_places koordinat tutmuyor (bkz. visitedPlaces.ts); bir karta tıklanınca
+  // güncel konum anlık çekilir. place_id: hangi kart "yükleniyor" gösterilsin.
+  const [locating, setLocating] = useState<string | null>(null)
+  const [locateError, setLocateError] = useState(false)
 
   useEffect(() => {
     if (!session) return setFrequent([])
     listFrequentPlaces(session.access_token).then(({ data }) => setFrequent(data ?? []))
   }, [session])
+
+  const pickFrequent = async (place: VisitedPlace) => {
+    if (locating) return
+    setLocateError(false)
+    setLocating(place.place_id)
+    try {
+      const { latitude, longitude } = await fetchPlaceLocation(place.place_id, session?.access_token)
+      onPickFrequent({ ...place, latitude, longitude })
+    } catch {
+      setLocateError(true)
+    } finally {
+      setLocating(null)
+    }
+  }
 
   return (
     <form
@@ -85,14 +105,20 @@ export function LocationScreen({ prefs, onChange, onContinue, onPickFrequent, se
             <p className="font-body-sm text-body-sm text-text-secondary mt-0.5">
               Birine dokun, o mekan rotana garanti girsin — süre/bütçe gibi tercihleri yine soracağız.
             </p>
+            {locateError && (
+              <p className="font-body-sm text-body-sm text-red-600 mt-0.5">
+                Mekanın konumu alınamadı, tekrar dener misin?
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-2">
             {frequent.map((place) => (
               <button
                 key={place.place_id}
                 type="button"
-                onClick={() => onPickFrequent(place)}
-                className="flex items-center gap-3 bg-surface-container-low rounded-xl p-3 text-left hover:bg-surface-container-high active:scale-[0.99] transition-all"
+                disabled={locating !== null}
+                onClick={() => void pickFrequent(place)}
+                className="flex items-center gap-3 bg-surface-container-low rounded-xl p-3 text-left hover:bg-surface-container-high active:scale-[0.99] transition-all disabled:opacity-60"
               >
                 <Icon name="favorite" fill className="text-plan-a text-[20px] flex-shrink-0" />
                 <div className="flex flex-col min-w-0 flex-1">
@@ -101,7 +127,7 @@ export function LocationScreen({ prefs, onChange, onContinue, onPickFrequent, se
                     <span className="font-body-sm text-body-sm text-text-secondary truncate">{place.address}</span>
                   )}
                 </div>
-                <Icon name="arrow_forward" className="text-text-secondary text-[18px] flex-shrink-0" />
+                <Icon name={locating === place.place_id ? 'progress_activity' : 'arrow_forward'} className={`text-text-secondary text-[18px] flex-shrink-0 ${locating === place.place_id ? 'animate-spin' : ''}`} />
               </button>
             ))}
           </div>

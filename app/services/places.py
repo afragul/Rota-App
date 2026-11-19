@@ -4,7 +4,7 @@ from typing import Any
 import httpx
 
 from app.core.config import get_settings
-from app.schemas.places import Place
+from app.schemas.places import Place, PlaceLocation
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,11 @@ _FIELD_MASK = ",".join(
         "places.types",
     ]
 )
+
+# Place Details'te sadece konum: Google'ın en ucuz ("Location Only") fiyat katmanında
+# kalır. favorite/visited mekanlarda koordinat saklamadığımız için (bkz.
+# get_place_location) kullanım anında bunu çekiyoruz.
+_LOCATION_FIELD_MASK = "location"
 
 
 class PlacesServiceError(Exception):
@@ -65,6 +70,34 @@ async def _post_places(endpoint: str, payload: dict[str, Any]) -> list[Place]:
 
     # Hiç sonuç yoksa Google boş bir gövde döner: {}
     return [_to_place(item) for item in data.get("places", [])]
+
+
+async def get_place_location(place_id: str) -> PlaceLocation:
+    """Bir place_id'nin GÜNCEL koordinatını tek seferlik çeker (saklanmaz — bkz.
+    PlaceLocation). favorite_places/visited_places artık enlem/boylam tutmadığı için
+    bir mekan gerçekten kullanılacağı an (çapa/durak eklenirken) buradan çekiliyor."""
+    settings = get_settings()
+    url = f"{settings.google_places_base_url}/places/{place_id}"
+
+    headers = {
+        "X-Goog-Api-Key": settings.places_api_key.get_secret_value(),
+        "X-Goog-FieldMask": _LOCATION_FIELD_MASK,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=settings.http_timeout) as client:
+            response = await client.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+    except httpx.HTTPError as exc:
+        logger.warning("Places Details API çağrısı başarısız: %s", exc)
+        raise PlacesServiceError("Mekân konumu alınamadı") from exc
+
+    try:
+        location = data["location"]
+        return PlaceLocation(latitude=location["latitude"], longitude=location["longitude"])
+    except (KeyError, TypeError) as exc:
+        raise PlacesServiceError("Mekân konumu alınamadı") from exc
 
 
 async def search_nearby(
