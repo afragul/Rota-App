@@ -315,6 +315,16 @@ fans out to several paid Google calls plus a Groq call per request:
   the service layer. `GET /shared/{id}` is the one deliberate exception: public,
   single-row-by-UUID lookup (never a listing), and it returns `is_owner`
   instead of the owner's `user_id`.
+- **`favorite_places`/`visited_places` never store coordinates** (`app/db/models.py::
+  _PlaceMixin` has no `latitude`/`longitude`) — Google Maps Platform's Places/Routes
+  Service Specific Terms (14.3/19.3) only allow caching lat/lng for up to 30 days,
+  not indefinitely, and `place_id`/name/address aren't covered by that limit so they
+  stay. When a place is actually turned into a stop/anchor (picking a favorite in
+  `DetailScreen.tsx`'s `StopEditSheet`, or a frequent place in `LocationScreen.tsx`),
+  the frontend calls `GET /places/{place_id}/location` (`app/services/places.py::
+  get_place_location`, cheapest "Location Only" field mask) to fetch it live — never
+  persisted. See ROADMAP.md "Üçüncü taraf ToS uyumluluğu" for the fuller picture
+  (the Leaflet/OSM-vs-Google-map question is still open, this is just the caching half).
 - **Refresh tokens** ([app/services/refresh_tokens.py](app/services/refresh_tokens.py),
   [app/api/cookies.py](app/api/cookies.py)): a long-lived opaque token in an
   `httpOnly`, `SameSite=Strict`, `Secure` cookie (`bugunluk_refresh`); only its

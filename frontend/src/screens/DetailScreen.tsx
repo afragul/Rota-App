@@ -1,13 +1,13 @@
 import type { Session } from '../auth'
 import { useEffect, useState } from 'react'
-import { fetchApproach, fetchLegs, type LatLng } from '../api'
+import { fetchApproach, fetchLegs, fetchPlaceLocation, type LatLng } from '../api'
 import { Icon } from '../components/Icon'
 import { PlaceSearch } from '../components/PlaceSearch'
 import { RouteMap } from '../components/RouteMap'
 import { addFavoritePlace, listFavoritePlaces, removeFavoritePlace } from '../favoritePlaces'
 import { TRAVEL_MODES, THEMES, THEME_TYPES, formatCost, formatDistance, formatHours, mapsUrl, planStyle } from '../meta'
 import { deleteSavedPlan, saveFavoritePlan } from '../savedPlans'
-import type { ApproachRoute, DayPlan, Place, PlanAlternative, PlanStop, RouteLeg, TravelMode } from '../types'
+import type { ApproachRoute, DayPlan, Place, PlaceWithoutLocation, PlanAlternative, PlanStop, RouteLeg, TravelMode } from '../types'
 import { recordVisit } from '../visitedPlaces'
 
 export type UserLocation =
@@ -97,7 +97,7 @@ interface StopEditSheetProps {
   /** Mekan aramasında sonuçların yakınında toplanacağı nokta (planın bölgesi). */
   near: LatLng
   accessToken?: string
-  favoritePlaces: Place[]
+  favoritePlaces: PlaceWithoutLocation[]
   usedIds: Set<string>
   alternatives: PlanAlternative[]
   currentIndex: number
@@ -130,6 +130,24 @@ function StopEditSheet({
   const [tab, setTab] = useState<'category' | 'other' | 'favorites' | 'search'>('category')
   const [category, setCategory] = useState<string | null>(null)
   const favoriteCandidates = favoritePlaces.filter((p) => !usedIds.has(p.place_id))
+  // favorite_places koordinat tutmuyor (bkz. favoritePlaces.ts); bir favori rotaya
+  // durak olarak eklenmek istendiğinde güncel konum anlık çekilir.
+  const [locatingFavoriteId, setLocatingFavoriteId] = useState<string | null>(null)
+  const [favoriteLocateError, setFavoriteLocateError] = useState(false)
+
+  const pickFavorite = async (p: PlaceWithoutLocation) => {
+    if (locatingFavoriteId) return
+    setFavoriteLocateError(false)
+    setLocatingFavoriteId(p.place_id)
+    try {
+      const { latitude, longitude } = await fetchPlaceLocation(p.place_id, accessToken)
+      onPickPlace({ ...p, latitude, longitude })
+    } catch {
+      setFavoriteLocateError(true)
+    } finally {
+      setLocatingFavoriteId(null)
+    }
+  }
 
   const candidates = pool.filter((p) => {
     if (usedIds.has(p.place_id)) return false
@@ -246,6 +264,11 @@ function StopEditSheet({
           </div>
         ) : tab === 'favorites' ? (
           <div className="flex flex-col gap-space-xs">
+            {favoriteLocateError && (
+              <p className="font-body-sm text-body-sm text-red-600 text-center">
+                Mekanın konumu alınamadı, tekrar dener misin?
+              </p>
+            )}
             {favoriteCandidates.length === 0 ? (
               <p className="font-body-sm text-body-sm text-text-secondary py-space-md text-center">
                 {favoritePlaces.length === 0 ? 'Henüz favorilediğin bir mekan yok.' : 'Favorilediğin mekanlar zaten rotada.'}
@@ -255,11 +278,17 @@ function StopEditSheet({
                 <button
                   key={p.place_id}
                   type="button"
-                  onClick={() => onPickPlace(p)}
-                  className="text-left p-space-sm rounded-xl bg-surface-container-low hover:bg-surface-container flex flex-col"
+                  disabled={locatingFavoriteId !== null}
+                  onClick={() => void pickFavorite(p)}
+                  className="text-left p-space-sm rounded-xl bg-surface-container-low hover:bg-surface-container flex items-center justify-between gap-space-sm disabled:opacity-60"
                 >
-                  <span className="font-label-md text-label-md text-ink">{p.name}</span>
-                  {p.address && <span className="font-body-sm text-body-sm text-text-secondary">{p.address}</span>}
+                  <span className="flex flex-col min-w-0">
+                    <span className="font-label-md text-label-md text-ink">{p.name}</span>
+                    {p.address && <span className="font-body-sm text-body-sm text-text-secondary">{p.address}</span>}
+                  </span>
+                  {locatingFavoriteId === p.place_id && (
+                    <Icon name="progress_activity" className="text-[18px] text-text-secondary animate-spin flex-shrink-0" />
+                  )}
                 </button>
               ))
             )}
@@ -343,7 +372,7 @@ export function DetailScreen({
   const [recalculating, setRecalculating] = useState(false)
   const [swapFor, setSwapFor] = useState<PlanStop | null>(null)
   const [adding, setAdding] = useState(false)
-  const [favoritePlaces, setFavoritePlaces] = useState<Place[]>([])
+  const [favoritePlaces, setFavoritePlaces] = useState<PlaceWithoutLocation[]>([])
   // Mekan aramasının önceliklendireceği nokta: planın kendi bölgesi (ilk koordinatlı durak,
   // yoksa havuzdaki ilk mekan). Hiçbiri yoksa Türkiye'nin ortası: yalnızca öncelik, sınır değil.
   const anchorStop = stops.find((st) => st.latitude != null && st.longitude != null)

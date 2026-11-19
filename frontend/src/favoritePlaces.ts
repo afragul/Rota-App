@@ -1,7 +1,7 @@
 import { apiRequest, settle } from './api'
-import type { Place } from './types'
+import type { Place, PlaceWithoutLocation } from './types'
 
-export interface FavoritePlace extends Place {
+export interface FavoritePlace extends PlaceWithoutLocation {
   id: string
 }
 

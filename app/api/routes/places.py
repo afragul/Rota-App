@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Path, Query, Request
 from pydantic import Field
 
 from app.api.deps import Session
@@ -8,8 +8,8 @@ from app.core.auth import get_optional_user_id
 from app.core.guest_limit import enforce_guest_search_limit
 from app.core.rate_limit import limiter
 from app.core.user_limit import enforce_user_search_limit
-from app.schemas.places import Place
-from app.services.places import search_nearby, search_text
+from app.schemas.places import Place, PlaceLocation
+from app.services.places import get_place_location, search_nearby, search_text
 
 router = APIRouter(
     prefix="/places",
@@ -57,3 +57,21 @@ async def search_places(
     enforce_guest_search_limit(request, user_id)
     await enforce_user_search_limit(session, user_id)
     return await search_text(q.strip(), latitude, longitude)
+
+
+@router.get("/{place_id}/location")
+@limiter.limit("20/minute")
+async def get_location(
+    request: Request,
+    session: Session,
+    place_id: Annotated[str, Path(min_length=1, max_length=300)],
+    user_id: str | None = Depends(get_optional_user_id),
+) -> PlaceLocation:
+    """Bir mekanın güncel koordinatını anlık çeker, saklamaz (bkz. ROADMAP.md "Üçüncü
+    taraf ToS uyumluluğu"). favorite_places/visited_places artık enlem/boylam tutmadığı
+    için bir favori/sık gidilen yer gerçekten kullanılacağı an (rotaya durak/çapa
+    eklenirken) frontend bunu çağırır. Ücretli bir Google çağrısı olduğundan aynı
+    arama kotasını (`/places/search` ile paylaşılan sayaç) kullanır."""
+    enforce_guest_search_limit(request, user_id)
+    await enforce_user_search_limit(session, user_id)
+    return await get_place_location(place_id)

@@ -1,7 +1,7 @@
 import { apiRequest, settle } from './api'
-import type { Place } from './types'
+import type { Place, PlaceWithoutLocation } from './types'
 
-export interface VisitedPlace extends Place {
+export interface VisitedPlace extends PlaceWithoutLocation {
   visit_count: number
   last_visited_at: string
 }

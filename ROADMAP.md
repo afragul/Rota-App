@@ -344,24 +344,47 @@ yayınlamadan önce yapılacaklar; öncelik sırasıyla (güvenlik/maliyet önce
   git geçmişinde de yok, kodda sabit anahtar yok, anahtarlar `SecretStr`), ama
   yayın ortamında ortam değişkeni/secret manager kullanılacak (Dockerfile
   yazılırken `.dockerignore` ile `.env` imaja girmemeli).
-- [ ] **Üçüncü taraf ToS uyumluluğu (2026-11-17, henüz karar verilmedi)**:
+- [ ] **Üçüncü taraf ToS uyumluluğu (2026-11-17, mimari kısmı henüz karar verilmedi)**:
   canlıya/gerçek kullanıcıya açmadan önce gözden geçirilmeli, düşük trafikte
   risk düşük ama büyüdükçe artıyor (ihlal = dava değil, erişimin kesilmesi):
-  - **Google Maps Platform + Leaflet/OSM birlikteliği**: Google ToS'unun geçmiş
-    sürümlerinde Places/Routes (Directions) içeriğinin Google-dışı bir haritada
-    (Leaflet/OSM) gösterilemeyeceğine dair bir madde var; güncel metin canlı
-    sayfadan (`cloud.google.com/maps-platform/terms/maps-service-terms`) doğrulanamadı
-    (sayfa JS ile render ediliyor, otomatik çekilemedi) — tarayıcıda elle
-    kontrol edilmeli. Mimarimiz tam bu kalıba giriyor: `RouteMap.tsx`/`NavMap.tsx`
-    Leaflet/OSM karosu üzerine Places mekanlarını ve Routes rota çizgisini basıyor.
-    Madde hâlâ geçerliyse iki seçenek var, ikisi de mimariyi/bütçeyi değiştirir:
-    (a) Leaflet'i Google Maps JS API ile değiştirmek, (b) Places/Routes'u
-    Google-dışı bir kaynakla değiştirmek (örn. Nominatim/Overpass + OSRM).
-  - **Google verisi saklama**: `favorite_places`/`visited_places` tabloları
-    `place_id`'nin yanında ad/adres/koordinatı da süresiz saklıyor; ToS'un bu
-    alanlar için süre sınırı olup olmadığı da aynı sebeple doğrulanamadı. Eğer
-    sınır varsa kod tarafında yalnızca `place_id` saklanıp gösterimde Place
-    Details ile yeniden çekmek gerekebilir (ek ücretli çağrı demek).
+  - **Google Maps Platform + Leaflet/OSM birlikteliği — DOĞRULANDI (2026-11-19)**:
+    Google Maps Platform Service Specific Terms'ten (kullanıcı tarayıcıdan okuyup
+    paylaştı) birebir alıntı: **Places API** "14.2 No use with a non-Google map.
+    Customer must not use Google Maps Content from the Places API in conjunction
+    with a non-Google map." — **Routes API** "19.2 No use with a non-Google map.
+    Customer must not use Google Maps Content from the Routes API in conjunction
+    with a non-Google map." Mimarimiz tam bu kalıba giriyor: `RouteMap.tsx`/`NavMap.tsx`
+    Leaflet/OSM karosu üzerine Places mekanlarını ve Routes rota çizgisini basıyor —
+    yani şu an bu madde teknik olarak ihlal ediliyor. Karar iki seçenek arasında,
+    ikisi de mimariyi/bütçeyi değiştirir: (a) Leaflet'i Google Maps JS API ile
+    değiştirmek (önerilen — Places/Routes verisi aynen kalır, yalnızca harita
+    bileşeni değişir, izole bir değişiklik), (b) Places/Routes'u Google-dışı bir
+    kaynakla değiştirmek (örn. Nominatim/Overpass + OSRM — mekan verisi kalitesi
+    düşer: puan/yorum sayısı gibi Google'a özgü alanlar kaybolur). Google'ın yeni
+    "Places UI Kit" ürünü (15.1) bu kısıtı kendi widget'ları için bilerek geçersiz
+    kılıyor ("This clause will prevail over the No Use with Non-Google Maps clause"),
+    ama (i) hazır/kendi tasarımımızla uyuşmayan bir UI bileşeni ve (ii) Routes
+    içeriği için aynı muafiyet yok — tek başına çözüm değil. Henüz kod değişikliği
+    yapılmadı, karar bekliyor.
+  - **Google verisi saklama — DÜZELTİLDİ (2026-11-19)**: aynı belgeden doğrulanan
+    **14.3/19.3**: "Customer may temporarily cache latitude and longitude values
+    from the Places/Routes API for up to 30 consecutive calendar days, after which
+    Customer must delete the cached latitude and longitude values." (yalnızca
+    enlem/boylam için geçerli — `place_id`/ad/adres bu maddenin kapsamında değil,
+    süresiz saklanabilir.) `favorite_places`/`visited_places` koordinatı süresiz
+    saklıyordu; artık **hiç saklamıyor** (`ea5e2f5c949e` migration'ı,
+    `app/db/models.py::_PlaceMixin`, `app/schemas/place_record.py::PlaceIn`).
+    Bunun yerine yeni `GET /places/{place_id}/location` (`app/services/places.py::
+    get_place_location`, en ucuz "Location Only" alan maskesiyle, `/places/search`
+    ile aynı misafir/hesap arama kotasını paylaşır) bir mekan GERÇEKTEN
+    kullanılacağı an (favoriden/sık gidilenden rotaya durak ya da çapa eklenirken)
+    konumu anlık çeker, hiçbir yere kaydetmez. Liste ekranları (Favorilerim, Sık
+    Gidilenler) zaten yalnızca ad/adres/puan gösterdiği için hiç etkilenmedi.
+    Gerçek Google API'siyle uçtan uca doğrulandı (favori eklendi, listede
+    koordinat yok, gerçek bir `place_id` ile `/location` doğru koordinatı döndü).
+    Testler: `tests/test_places_service.py` (get_place_location), yeni
+    `tests/test_place_location_route.py`, `tests/test_places_records_routes.py::
+    test_favori_kaydinda_koordinat_saklanmaz`.
   - **OSM tile politikası — doğrulandı**: `operations.osmfoundation.org/policies/tiles`
     canlı sayfası okundu — yoğun/ticari trafikte bildirimsiz erişim kesilebileceği,
     bunun yerine ücretli bir sağlayıcı (MapTiler/Stadia Maps/Mapbox/Jawg) veya
@@ -501,8 +524,8 @@ VERBİS kaydı, yurt dışı aktarım şartları) bir hukuk uzmanıyla netleşti
 | Şifre sıfırlama token'ı (SHA-256 özeti, 1 saat; kullanılınca/yenisi gelince silinir) | PostgreSQL `password_reset_tokens` | "Şifremi unuttum" |
 | E-posta adresi + sıfırlama bağlantısı | SMTP sağlayıcısına iletilir | "Şifremi unuttum" |
 | Kaydedilen planlar (durak, konum, `user_id`) | PostgreSQL `saved_plans` | Kullanıcı |
-| Favori mekanlar (ad, adres, koordinat) | PostgreSQL `favorite_places` | Kullanıcı |
-| Ziyaret geçmişi (mekan, koordinat, ziyaret sayısı, son ziyaret zamanı) | PostgreSQL `visited_places` | "Ulaşıldı" işaretlemesi |
+| Favori mekanlar (ad, adres — koordinat YOK, bkz. Milestone 4 "Üçüncü taraf ToS uyumluluğu") | PostgreSQL `favorite_places` | Kullanıcı |
+| Ziyaret geçmişi (mekan adı/adresi — koordinat YOK, ziyaret sayısı, son ziyaret zamanı) | PostgreSQL `visited_places` | "Ulaşıldı" işaretlemesi |
 | Şehir/adres metni, koordinat, serbest metin, tercihler | Backend isteği; Google/Groq/Open-Meteo'ya iletilir; kısmen log'a düşer | Plan formu |
 | IP adresi | Rate limit ve misafir kotası (bellekte), uvicorn erişim log'u | Her istek |
 | Anlık cihaz konumu (navigasyon) | `watchPosition` → `/route/approach` → Google Routes; kodda kalıcı saklandığı yer görülmedi | Cihaz |
