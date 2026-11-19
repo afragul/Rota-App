@@ -51,11 +51,11 @@ function errorCopy(error: ApiError): { title: string; message: string } {
 }
 
 const TITLES: Record<View['name'], string> = {
-  location: 'Rota Oluştur',
-  prefs: 'Rota Oluştur',
+  location: 'Nereye gidelim?',
+  prefs: 'Nereye gidelim?',
   loading: 'Günlük Planlar',
-  limit: 'Rota Oluştur',
-  clarify: 'Rota Oluştur',
+  limit: 'Nereye gidelim?',
+  clarify: 'Nereye gidelim?',
   error: 'Günlük Planlar',
   results: 'Günlük Planlar',
   detail: 'Plan Detayı',

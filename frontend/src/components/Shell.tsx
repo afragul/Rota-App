@@ -41,12 +41,12 @@ export function Shell({ title, nav, plansEnabled, onNav, onBack, theme, onToggle
                 <Icon name="arrow_back" className="text-[24px]" />
               </button>
             ) : (
-              <Logo className="h-8 w-auto flex-shrink-0" />
+              <Logo className="h-10 w-auto flex-shrink-0 -ml-1" />
             )}
             <div className="flex flex-col min-w-0">
               {!onBack && (
-                <span className="font-label-sm text-label-sm text-text-secondary uppercase tracking-wider truncate">
-                  Bugün nereye gidelim?
+                <span className="text-[11px] font-bold text-primary uppercase tracking-widest truncate leading-none">
+                  Bugünlük
                 </span>
               )}
               <h1 className="font-headline-md text-headline-md text-ink truncate leading-tight">{title}</h1>
