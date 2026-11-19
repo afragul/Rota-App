@@ -9,7 +9,7 @@ from app.core.config import get_settings
 
 _hasher = PasswordHasher()
 _JWT_ALGORITHM = "HS256"
-_JWT_ISSUER = "rota-app"
+_JWT_ISSUER = "bugunluk"
 
 # Kullanıcı bulunamadığında da gerçek bir doğrulama süresi harcayabilmek için
 # (zamanlama farkından "bu e-posta kayıtlı mı" sızmasın) sahte bir hash.

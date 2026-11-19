@@ -3,7 +3,7 @@ from sqlalchemy import func, select
 from app.db.models import FavoritePlace, RefreshToken, SavedPlan, User, VisitedPlace
 
 SIFRE = "uzun-bir-sifre-1"
-COOKIE = "rota_refresh"
+COOKIE = "bugunluk_refresh"
 PLACE = {
     "place_id": "yer-1",
     "name": "Kapalı Çarşı",

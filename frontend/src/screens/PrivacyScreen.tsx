@@ -52,7 +52,7 @@ export function PrivacyScreen() {
         <p>
           <strong className="text-ink">Teknik veriler:</strong> IP adresin hız sınırı ve günlük kullanım kotası için
           kullanılır ve sunucu erişim kayıtlarında yer alabilir. Oturumun için tarayıcında bir erişim anahtarı, tema
-          ve misafir plan sayacı ile bir oturum çerezi (<code>rota_refresh</code>) tutulur. Sayfayı yenileyince planın kaybolmasın diye son planın, tercihlerin ve açık ekranın yalnızca bu cihazın tarayıcısında saklanır (12 saat sonra geçersiz sayılır); sunucuya gönderilmez, çıkış yapınca ya da hesabını silince temizlenir.
+          ve misafir plan sayacı ile bir oturum çerezi (<code>bugunluk_refresh</code>) tutulur. Sayfayı yenileyince planın kaybolmasın diye son planın, tercihlerin ve açık ekranın yalnızca bu cihazın tarayıcısında saklanır (12 saat sonra geçersiz sayılır); sunucuya gönderilmez, çıkış yapınca ya da hesabını silince temizlenir.
         </p>
       </Section>
 

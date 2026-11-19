@@ -185,13 +185,13 @@ async def test_kisa_yeni_sifre_reddedilir_ve_token_tuketilmez(client, gonderilen
 
 async def test_sifirlama_tum_oturumlari_kapatir(client, gonderilenler):
     await _kayit(client)
-    ham = client.cookies.get("rota_refresh")  # saldırganın ele geçirmiş olabileceği oturum
+    ham = client.cookies.get("bugunluk_refresh")  # saldırganın ele geçirmiş olabileceği oturum
     await _forgot(client)
     token = _token(gonderilenler[0])
     await client.post("/auth/reset", json={"token": token, "new_password": YENI})
 
     client.cookies.clear()
-    yenile = await client.post("/auth/refresh", headers={"cookie": f"rota_refresh={ham}"})
+    yenile = await client.post("/auth/refresh", headers={"cookie": f"bugunluk_refresh={ham}"})
     assert yenile.status_code == 401
 
 

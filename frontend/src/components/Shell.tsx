@@ -46,7 +46,7 @@ export function Shell({ title, nav, plansEnabled, onNav, onBack, theme, onToggle
             <div className="flex flex-col min-w-0">
               {!onBack && (
                 <span className="font-label-sm text-label-sm text-text-secondary uppercase tracking-wider truncate">
-                  Rota AI
+                  Bugün nereye gidelim?
                 </span>
               )}
               <h1 className="font-headline-md text-headline-md text-ink truncate leading-tight">{title}</h1>

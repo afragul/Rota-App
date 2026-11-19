@@ -35,13 +35,13 @@ def build_email(raw_token: str) -> tuple[str, str]:
     minutes = settings.password_reset_expire_minutes
     body = (
         "Merhaba,\n\n"
-        "Rota hesabın için şifre sıfırlama isteği aldık. Yeni şifre belirlemek için "
+        "Bugünlük hesabın için şifre sıfırlama isteği aldık. Yeni şifre belirlemek için "
         f"aşağıdaki bağlantıya tıkla (en fazla {minutes} dakika geçerli, yalnızca bir kez "
         "kullanılabilir):\n\n"
         f"{link}\n\n"
         "Bu isteği sen yapmadıysan bu e-postayı görmezden gelebilirsin; şifren değişmez.\n"
     )
-    return "Rota - Şifre sıfırlama", body
+    return "Bugünlük - Şifre sıfırlama", body
 
 
 async def create_token(session: AsyncSession, email: str) -> tuple[str, str] | None:

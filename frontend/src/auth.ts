@@ -20,10 +20,10 @@ interface TokenResponse {
   user: AuthUser
 }
 
-const STORAGE_KEY = 'rota.session'
+const STORAGE_KEY = 'bugunluk.session'
 // Daha önce giriş yapıldı mı? Yalnızca "refresh cookie'si olabilir" ipucu: hiç giriş
 // yapmamış misafirler için açılışta boşuna /auth/refresh çağrılmasın. Gizli değer içermez.
-const HINT_KEY = 'rota.hint'
+const HINT_KEY = 'bugunluk.hint'
 // Erişim token'ı bitmeden bu kadar önce sessizce yenilenir.
 const REFRESH_MARGIN_MS = 60_000
 const RETRY_MS = 30_000
@@ -117,7 +117,7 @@ async function refreshSession(): Promise<void> {
   const stale = current?.access_token
   try {
     // Sekmeler arası kilit: Web Locks varsa aynı anda tek sekme yeniler.
-    if (navigator.locks) await navigator.locks.request('rota-refresh', () => doRefresh(stale))
+    if (navigator.locks) await navigator.locks.request('bugunluk-refresh', () => doRefresh(stale))
     else await doRefresh(stale)
     schedule(current)
   } catch (err) {

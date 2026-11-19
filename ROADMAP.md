@@ -464,7 +464,7 @@ VERBİS kaydı, yurt dışı aktarım şartları) bir hukuk uzmanıyla netleşti
 | IP adresi | Rate limit ve misafir kotası (bellekte), uvicorn erişim log'u | Her istek |
 | Anlık cihaz konumu (navigasyon) | `watchPosition` → `/route/approach` → Google Routes; kodda kalıcı saklandığı yer görülmedi | Cihaz |
 | Erişim token'ı (15 dk), tema, misafir plan sayacı | Tarayıcı `localStorage` | İstemci |
-| Refresh token (30 gün) | **Çerez** (`rota_refresh`, `HttpOnly`, `SameSite=Strict`, `Secure`) | Giriş |
+| Refresh token (30 gün) | **Çerez** (`bugunluk_refresh`, `HttpOnly`, `SameSite=Strict`, `Secure`) | Giriş |
 
 **Üçüncü taraflar / yurt dışı aktarım:** E-posta (SMTP) sağlayıcısı (seçilince; yalnızca şifre sıfırlama e-postasının adresi ve içeriği), Google (Geocoding, Places, Routes),
 Groq (serbest metin, tercihler, mekan listesi LLM'e gider), Open-Meteo

@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     )
 
     # --- Uygulama ---
-    app_name: str = "Rota App"
+    app_name: str = "Bugünlük"
     debug: bool = False
     # Log seviyesi ve biçimi: canlıda "json" (log toplayıcılar için), yerelde okunaklı "text".
     log_level: str = "INFO"

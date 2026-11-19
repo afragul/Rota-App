@@ -13,7 +13,7 @@ def _secret() -> str:
 
 def _token(sub: str = "user-1", secret: str | None = None, **overrides) -> str:
     now = datetime.now(UTC)
-    claims = {"sub": sub, "iss": "rota-app", "iat": now, "exp": now + timedelta(minutes=5)}
+    claims = {"sub": sub, "iss": "bugunluk", "iat": now, "exp": now + timedelta(minutes=5)}
     claims.update(overrides)
     return jwt.encode(claims, secret or _secret(), algorithm="HS256")
 
@@ -38,12 +38,12 @@ def test_yanlis_issuer_reddedilir():
 
 
 def test_exp_olmayan_token_reddedilir():
-    claims = {"sub": "user-1", "iss": "rota-app"}
+    claims = {"sub": "user-1", "iss": "bugunluk"}
     assert decode_access_token(jwt.encode(claims, _secret(), algorithm="HS256")) is None
 
 
 def test_none_algoritmali_token_reddedilir():
-    claims = {"sub": "user-1", "iss": "rota-app", "exp": datetime.now(UTC) + timedelta(minutes=5)}
+    claims = {"sub": "user-1", "iss": "bugunluk", "exp": datetime.now(UTC) + timedelta(minutes=5)}
     assert decode_access_token(jwt.encode(claims, None, algorithm="none")) is None
 
 

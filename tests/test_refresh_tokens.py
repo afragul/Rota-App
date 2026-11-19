@@ -6,7 +6,7 @@ from app.core.auth import get_optional_user_id
 from app.core.config import get_settings
 from app.db.models import RefreshToken
 
-COOKIE = "rota_refresh"
+COOKIE = "bugunluk_refresh"
 KAYIT = {"email": "ada@example.com", "username": "ada", "password": "uzun-bir-sifre-1"}
 
 
