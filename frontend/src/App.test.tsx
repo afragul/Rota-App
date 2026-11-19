@@ -65,14 +65,14 @@ describe('sayfa yenilenince/siteye tekrar girince plan geri yüklenir (planStora
     render(<App />)
 
     expect(await screen.findByText('Geri Yüklenen Plan')).toBeInTheDocument()
-    expect(screen.queryByText('Nerede plan yapalım?')).not.toBeInTheDocument()
+    expect(screen.queryByText('Hangi semtte olacaksınız?')).not.toBeInTheDocument()
   })
 
   it('hiçbir kayıt yoksa normal şekilde konum ekranından başlar', async () => {
     const { default: App } = await import('./App')
     render(<App />)
 
-    expect(await screen.findByText('Nerede plan yapalım?')).toBeInTheDocument()
+    expect(await screen.findByText('Hangi semtte olacaksınız?')).toBeInTheDocument()
   })
 
   it('bozuk/eski sürüm bir kayıt sessizce yok sayılır, uygulama çökmez ve konum ekranına düşer', async () => {
@@ -80,7 +80,7 @@ describe('sayfa yenilenince/siteye tekrar girince plan geri yüklenir (planStora
 
     const { default: App } = await import('./App')
     expect(() => render(<App />)).not.toThrow()
-    expect(await screen.findByText('Nerede plan yapalım?')).toBeInTheDocument()
+    expect(await screen.findByText('Hangi semtte olacaksınız?')).toBeInTheDocument()
   })
 
   it('12 saatten eski bir plan geçersiz sayılır, konum ekranına düşülür (süre createdAt\'tan sayılır)', async () => {
@@ -95,7 +95,7 @@ describe('sayfa yenilenince/siteye tekrar girince plan geri yüklenir (planStora
     const { default: App } = await import('./App')
     render(<App />)
 
-    expect(await screen.findByText('Nerede plan yapalım?')).toBeInTheDocument()
+    expect(await screen.findByText('Hangi semtte olacaksınız?')).toBeInTheDocument()
     expect(screen.queryByText('Geri Yüklenen Plan')).not.toBeInTheDocument()
   })
 

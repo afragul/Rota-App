@@ -41,11 +41,10 @@ export function LocationScreen({ prefs, onChange, onContinue, onPickFrequent, se
           <span className="w-2 h-2 rounded-full bg-plan-a animate-pulse" />
           <span className="font-label-sm text-label-sm text-ink font-semibold">Adım 1 / 3</span>
         </div>
-        <span className="font-label-sm text-label-sm text-text-secondary">Hızlı Rota Başlangıcı</span>
       </div>
 
       <div className="flex flex-col gap-1.5 mb-6">
-        <h2 className="font-headline-xl-mobile text-headline-xl-mobile text-ink tracking-tight">Nerede plan yapalım?</h2>
+        <h2 className="font-headline-xl-mobile text-headline-xl-mobile text-ink tracking-tight">Hangi semtte olacaksınız?</h2>
         <p className="font-body-md text-body-md text-text-secondary">
           Gününüzü planlamak istediğiniz şehri veya semti yazın.
         </p>

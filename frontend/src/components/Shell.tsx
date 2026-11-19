@@ -71,7 +71,7 @@ export function Shell({ title, nav, plansEnabled, onNav, onBack, theme, onToggle
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col relative w-full max-w-md mx-auto px-margin pt-16 pb-24 bg-background min-h-screen">
+      <main className="flex-1 flex flex-col relative w-full max-w-md mx-auto px-margin pt-20 pb-24 bg-background min-h-screen">
         {children}
       </main>
 
