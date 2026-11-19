@@ -24,6 +24,21 @@ env:
   JWT_SECRET: ci-icin-sahte-jwt-anahtari-en-az-32-karakter
 
 jobs:
+  gitleaks:
+    # Push/PR'daki yeni commit'leri tarar (tam geçmişi değil); bilerek sahte/test
+    # amaçlı değerler (ör. test JWT_SECRET'leri) .gitleaksignore'da fingerprint'leriyle
+    # işaretli, CI'ı kırmaz. Yeni bir fingerprint eklemeden önce değerin gerçekten
+    # sahte olduğundan emin ol.
+    name: Sır taraması (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   backend:
     name: Backend (Python ${{ matrix.python }})
     runs-on: ubuntu-latest

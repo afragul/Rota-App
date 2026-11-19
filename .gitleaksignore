@@ -1,0 +1,15 @@
+# gitleaks'in bilerek sahte/test amaçlı değerleri yanlışlıkla "sızıntı" diye
+# işaretlediği bulgular. Her satır bir fingerprint (commit:dosya:kural:satır).
+# Yeni bir fingerprint buraya eklemeden önce değerin GERÇEKTEN sahte/test
+# amaçlı olduğundan emin ol.
+
+# .github/workflows/ci.yml: CI'da kullanılan, açıkça "ci-icin-sahte" diye
+# adlandırılmış JWT_SECRET placeholder'ı.
+7caec5205a7edf01786759809c5c0927c0868b96:.github/workflows/ci.yml:generic-api-key:24
+
+# tests/conftest.py: testlerde kullanılan sabit, sahte JWT_SECRET.
+8e4b4592f8e5950c96b40b28420d97af367ebf24:tests/conftest.py:generic-api-key:9
+
+# tests/test_auth_jwt.py: "yanlış secret" senaryosunu test etmek için
+# kullanılan, bilerek farklı/sahte bir secret.
+8e4b4592f8e5950c96b40b28420d97af367ebf24:tests/test_auth_jwt.py:generic-api-key:28

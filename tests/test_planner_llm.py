@@ -164,6 +164,19 @@ async def test_create_plan_groq_hata_verirse(fake_groq):
         await create_plan(REQUEST, PLACES, "açık")
 
 
+async def test_create_plan_ilk_deneme_basarisizsa_ikincide_toparlanir(fake_groq):
+    """Groq bir seferliğine çöküp/geçersiz yanıt dönse bile (gerçekte ara sıra
+    oluyor, bkz. ROADMAP.md "LLM çıktı kalitesi"), aynı deneme bütçesi
+    içinde ikinci çağrı başarılıysa kullanıcı hata görmemeli."""
+    fake = fake_groq(RuntimeError("geçici hata"), _plan_json(_stop("p1", 1), _stop("p2", 2)))
+
+    plan = await create_plan(REQUEST, PLACES, "20°C, açık")
+
+    assert len(fake.calls) == 2
+    assert len(plan.alternatives) == 2
+    assert [s.place_id for s in plan.alternatives[0].stops] == ["p1", "p2"]
+
+
 async def test_create_plan_bos_yanit(fake_groq):
     fake_groq(None)
 
@@ -266,10 +279,18 @@ async def test_check_ambiguity_hatada_none_doner_plana_devam_edilir(fake_groq, r
 
 
 def test_llm_semasi_sistemin_doldurdugu_alanlari_icermez():
-    """legs/weather gibi alanlar prompt'u şişirmesin, LLM zaten üretmiyor."""
+    """legs/weather/place_pool gibi alanlar prompt'u şişirmesin, LLM zaten üretmiyor.
+
+    place_pool burada gerçek bir regresyonu temsil ediyor: Supabase->Postgres
+    geçişinde DayPlan'a eklenmişti ama _SYSTEM_FILLED'e yansıtılmamıştı; bu da
+    tüm mekan havuzunun (Place şemasıyla) prompt'a gömülüp Groq'un geçersiz/büyük
+    JSON üretmesine yol açıyordu (bkz. ROADMAP.md "LLM çıktı kalitesi")."""
     schema = json.dumps(_llm_schema(DayPlan))
 
-    for alan in ("legs", "routes_available", "weather", "RouteStep", "TransitDetail"):
+    for alan in ("legs", "routes_available", "weather", "place_pool", "RouteStep", "TransitDetail"):
         assert alan not in schema
+    # Place'e özgü bir alan: place_pool'un $defs'teki Place tanımını da sürüklemediğini
+    # dolaylı doğrular (bare "Place" kontrolü "Place Id" title'ına çarpar, o yüzden burada değil).
+    assert "user_rating_count" not in schema
     # LLM'in üreteceği alanlar yerinde kalmalı
     assert "alternatives" in schema and "place_id" in schema and "recommendation" in schema
