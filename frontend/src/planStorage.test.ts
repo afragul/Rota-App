@@ -74,7 +74,7 @@ describe('planStorage', () => {
   it('detay indeksi geçersizse (aralık dışı, tamsayı değil, negatif) sonuçlara düşer', () => {
     for (const index of [5, -1, 0.5, Number.NaN]) {
       store.set(
-        'rota.lastPlan',
+        'bugunluk.lastPlan',
         JSON.stringify({ v: 1, ...state(), view: { name: 'detail', index } }),
       )
       expect(loadState(NOW)?.view).toEqual({ name: 'results' })
@@ -82,26 +82,26 @@ describe('planStorage', () => {
   })
 
   it('bilinmeyen sürüm, bozuk JSON ve şekilsiz plan yok sayılır, hata fırlatmaz', () => {
-    store.set('rota.lastPlan', JSON.stringify({ v: 99, ...state() }))
+    store.set('bugunluk.lastPlan', JSON.stringify({ v: 99, ...state() }))
     expect(loadState(NOW)).toBeNull()
 
-    store.set('rota.lastPlan', '{bozuk')
+    store.set('bugunluk.lastPlan', '{bozuk')
     expect(loadState(NOW)).toBeNull()
 
     for (const bad of [null, {}, { alternatives: [] }, { alternatives: [{ stops: 'x', legs: [], title: 't' }] }]) {
-      store.set('rota.lastPlan', JSON.stringify({ v: 1, ...state(), plan: bad }))
+      store.set('bugunluk.lastPlan', JSON.stringify({ v: 1, ...state(), plan: bad }))
       expect(loadState(NOW)).toBeNull()
     }
   })
 
   it('eksik tercih alanları varsayılanla tamamlanır; geçersiz tercih kaydı reddedilir', () => {
     store.set(
-      'rota.lastPlan',
+      'bugunluk.lastPlan',
       JSON.stringify({ v: 1, ...state(), prefs: { cityInput: 'İzmir', duration: 3, note: '', categories: [] } }),
     )
     expect(loadState(NOW)?.prefs).toMatchObject({ cityInput: 'İzmir', duration: 3, group: DEFAULT_PREFS.group })
 
-    store.set('rota.lastPlan', JSON.stringify({ v: 1, ...state(), prefs: { cityInput: 5 } }))
+    store.set('bugunluk.lastPlan', JSON.stringify({ v: 1, ...state(), prefs: { cityInput: 5 } }))
     expect(loadState(NOW)).toBeNull()
   })
 

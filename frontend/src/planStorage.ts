@@ -4,7 +4,7 @@ import type { DayPlan } from './types'
 // Son plan, tercihler ve açık ekran bu cihazın localStorage'ında tutulur: sayfa yenilenince ya da
 // siteden çıkıp girince plan kaybolmasın (yeniden üretmek ücretli bir Google + Groq çağrısı).
 // Yalnızca bu tarayıcıda durur, sunucuya gitmez; çıkış yapınca/hesap silinince temizlenir.
-const KEY = 'rota.lastPlan'
+const KEY = 'bugunluk.lastPlan'
 const VERSION = 1
 // Hava durumu ve saatler bayatlar: bundan eski plan geri yüklenmez. Süre planın ÜRETİLDİĞİ
 // andan sayılır (her kayıtta ya da yenilemede uzamaz).

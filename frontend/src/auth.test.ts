@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // auth.ts modül yüklenirken oturumu okur ve zamanlayıcı/olay dinleyicisi kurar: her testte
 // ortamı (localStorage, window, navigator, fetch) kurup modülü SIFIRDAN yüklüyoruz.
 
-const SESSION_KEY = 'rota.session'
-const HINT_KEY = 'rota.hint'
+const SESSION_KEY = 'bugunluk.session'
+const HINT_KEY = 'bugunluk.hint'
 const USER = { id: 'u1', email: 'ada@example.com', username: 'ada' }
 
 const fetchMock = vi.fn()
@@ -191,7 +191,7 @@ describe('sessiz yenileme', () => {
 
     const withLocks = await loadAuth({ storage: { [SESSION_KEY]: storedSession('e', 61_000) } })
     await vi.advanceTimersByTimeAsync(10_000)
-    expect(withLocks.lockRequest).toHaveBeenCalledWith('rota-refresh', expect.any(Function))
+    expect(withLocks.lockRequest).toHaveBeenCalledWith('bugunluk-refresh', expect.any(Function))
   })
 
   it('başka sekme az önce yeniledi: taze token alınır, tekrar yenilenmez', async () => {

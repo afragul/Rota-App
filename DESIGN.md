@@ -1,4 +1,4 @@
-# Rota App — UI Tasarım Dokümanı
+# Bugünlük — UI Tasarım Dokümanı
 
 Bu doküman henüz yazılmamış olan frontend/arayüz için bir başlangıç noktasıdır. Backend'de (`app/`) hazır olan uç noktalar ve şemalar (`PlanRequest`, `DayPlan`, `ClarificationNeeded`) referans alınarak hazırlandı; ekranlar ve alanlar API ile birebir eşleşecek şekilde tanımlandı. README.md'deki "Şu anki durum" bölümüyle tutarlı: burada tarif edilen bazı adımlar (şehir arama, indoor/outdoor rozeti, harita rotası) backend'de henüz karşılığı olmayan **hedef** akışlardır, ilgili yerlerde belirtildi.
 

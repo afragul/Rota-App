@@ -23,7 +23,7 @@ function cspPlugin(): Plugin {
   ].join('; ')
 
   return {
-    name: 'rota-csp',
+    name: 'bugunluk-csp',
     apply: 'build',
     transformIndexHtml(html) {
       return html.replace(

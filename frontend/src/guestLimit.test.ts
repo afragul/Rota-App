@@ -29,7 +29,7 @@ describe('guestLimit (localStorage sayacı)', () => {
 
   it('bozuk değer (sayı değil, negatif) 0 sayılır', () => {
     for (const bad of ['abc', '-5', 'NaN', '']) {
-      stubStorage({ 'rota-guest-plan-count': bad })
+      stubStorage({ 'bugunluk-guest-plan-count': bad })
       expect(guestPlanCount()).toBe(0)
     }
   })

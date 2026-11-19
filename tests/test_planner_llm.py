@@ -96,13 +96,13 @@ async def test_create_plan_tek_alternatifte_bir_kez_daha_dener(fake_groq):
     assert len(plan.alternatives) == 2
 
 
-async def test_create_plan_hep_tek_alternatifse_ikinci_denemeden_sonra_birakir(fake_groq):
+async def test_create_plan_hep_tek_alternatifse_ucuncu_denemeden_sonra_birakir(fake_groq):
     """Deneme sayısı sınırlı; yine tek gelirse plan hata vermeden döner."""
     fake = fake_groq(_plan_json(_stop("p1", 1), alternatives=1))
 
     plan = await create_plan(REQUEST, PLACES, "20°C, açık")
 
-    assert len(fake.calls) == 2
+    assert len(fake.calls) == 3
     assert len(plan.alternatives) == 1
 
 

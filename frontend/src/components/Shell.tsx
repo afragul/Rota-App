@@ -41,12 +41,12 @@ export function Shell({ title, nav, plansEnabled, onNav, onBack, theme, onToggle
                 <Icon name="arrow_back" className="text-[24px]" />
               </button>
             ) : (
-              <Logo className="h-8 w-auto flex-shrink-0" />
+              <Logo className="h-10 w-auto flex-shrink-0 -ml-1" />
             )}
             <div className="flex flex-col min-w-0">
               {!onBack && (
-                <span className="font-label-sm text-label-sm text-text-secondary uppercase tracking-wider truncate">
-                  Rota AI
+                <span className="text-[11px] font-bold text-primary uppercase tracking-widest truncate leading-none">
+                  Bugünlük
                 </span>
               )}
               <h1 className="font-headline-md text-headline-md text-ink truncate leading-tight">{title}</h1>
@@ -71,7 +71,7 @@ export function Shell({ title, nav, plansEnabled, onNav, onBack, theme, onToggle
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col relative w-full max-w-md mx-auto px-margin pt-16 pb-24 bg-background min-h-screen">
+      <main className="flex-1 flex flex-col relative w-full max-w-md mx-auto px-margin pt-20 pb-24 bg-background min-h-screen">
         {children}
       </main>
 

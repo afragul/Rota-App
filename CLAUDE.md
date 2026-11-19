@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Rota App: a FastAPI backend that builds group activity/day-trip plans. Given a
+Bugünlük (formerly "Rota App"; slogan "Bugün nereye gidelim?"; the DB name/user (`rota`), Dockerfile user and repo name keep the old identifiers; JWT issuer, cookie, localStorage keys and package are `bugunluk`): a FastAPI backend that builds group activity/day-trip plans. Given a
 location, duration, budget, and group type, it searches nearby places (Google
 Places API), fetches current weather (Open-Meteo), and asks an LLM (Groq) to compose
 2-3 alternative themed day plans using only the fetched places.
@@ -243,7 +243,7 @@ fans out to several paid Google calls plus a Groq call per request:
   across the whole test run and start rejecting later tests.
 - [app/core/auth.py](app/core/auth.py)'s `get_optional_user_id` is a
   FastAPI dependency that verifies the backend's own access token (HS256 JWT
-  signed with `JWT_SECRET`, `iss=rota-app`, `exp` and `sub` required —
+  signed with `JWT_SECRET`, `iss=bugunluk`, `exp` and `sub` required —
   [app/core/security.py](app/core/security.py)) from the `Authorization: Bearer`
   header, returning the user id or `None`. It never raises — a missing or
   invalid token just means "treat as guest". `require_user_id` (same file)
@@ -317,7 +317,7 @@ fans out to several paid Google calls plus a Groq call per request:
   instead of the owner's `user_id`.
 - **Refresh tokens** ([app/services/refresh_tokens.py](app/services/refresh_tokens.py),
   [app/api/cookies.py](app/api/cookies.py)): a long-lived opaque token in an
-  `httpOnly`, `SameSite=Strict`, `Secure` cookie (`rota_refresh`); only its
+  `httpOnly`, `SameSite=Strict`, `Secure` cookie (`bugunluk_refresh`); only its
   SHA-256 is stored. It rotates on every `/auth/refresh`; a revoked token
   replayed *after* `refresh_reuse_grace_seconds` revokes its whole family
   (theft detection), while a replay inside the grace window just returns `401`
@@ -419,7 +419,7 @@ and report changes back up via callbacks (e.g. `DetailScreen`'s
   attach (`session.access_token`).
 - **Reload persistence** (`planStorage.ts`): the current plan, preferences and open
   screen (`results` or `detail`+index; everything else falls back to `results`) are
-  mirrored to `localStorage` (`rota.lastPlan`) by an effect in `App.tsx` and restored
+  mirrored to `localStorage` (`bugunluk.lastPlan`) by an effect in `App.tsx` and restored
   by a pure lazy initializer. Records expire 12 h after the plan was *generated*
   (`createdAt`, held in a ref — re-saving or reloading must not extend it), are
   version-tagged and shape-checked (anything doubtful is ignored → home screen).

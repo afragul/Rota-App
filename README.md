@@ -1,4 +1,4 @@
-# Rota App
+# Bugünlük
 
 Gruplar (arkadaş, aile, çift, tek kişi) için yapay zekâ destekli günlük rota planlayıcı. Kullanıcı birkaç tercih seçer, sistem konumun hava durumunu ve yakındaki mekânları toplar, Groq üzerinden çalışan bir LLM bu verilerden birbirinden farklı alternatif planlar kurar.
 
@@ -91,7 +91,7 @@ cp .env.example .env
 | `GOOGLE_GEOCODING_BASE_URL` | hayır | Varsayılan: `https://maps.googleapis.com/maps/api/geocode/json` |
 | `GROQ_MODEL` | hayır | Varsayılan: `openai/gpt-oss-120b`. Hangi modellerin erişilebilir olduğu hesap/tier'a göre değişir (bkz. `console.groq.com/docs/models`). |
 | `HTTP_TIMEOUT` | hayır | Dış servis çağrıları için saniye cinsinden zaman aşımı (varsayılan `10.0`) |
-| `APP_NAME` | hayır | Varsayılan: `Rota App` |
+| `APP_NAME` | hayır | Varsayılan: `Bugünlük` |
 | `DEBUG` | hayır | Varsayılan: `false`. `true` olmadıkça `/docs`, `/redoc`, `/openapi.json` kapalıdır. |
 | `LOG_LEVEL`, `LOG_FORMAT` | hayır | Varsayılanlar `INFO` ve `text`. Canlıda `LOG_FORMAT=json` önerilir: satır başına bir JSON nesnesi (log toplayıcılar için). Her log satırında istek numarası (`request_id`) bulunur |
 | `RATE_LIMIT_ENABLED` | hayır | Varsayılan: `true`. IP bazlı rate limiting'i (`slowapi`) kapatmak için `false` (testlerde kapalı) |
@@ -109,7 +109,7 @@ cp .env.example .env
 | `USER_DAILY_PLAN_LIMIT` | hayır | Varsayılan: `30`. Giriş yapmış bir kullanıcının günlük `/plan` kotası (hesap açmak ücretsiz olduğundan ücretli Google/Groq çağrılarına hesap başına da üst sınır). Gün Türkiye saatine (UTC+3) göre; sayaç veritabanında tutulur |
 | `USER_DAILY_LEGS_LIMIT` | hayır | Varsayılan: `300`. Giriş yapmış bir kullanıcının günlük `/route/legs` kotası (`/plan`'dan ayrı sayaç) |
 | `USER_DAILY_SEARCH_LIMIT` | hayır | Varsayılan: `100`. Giriş yapmış bir kullanıcının günlük `/places/search` kotası (ayrı sayaç) |
-| `SMTP_HOST`, `SMTP_FROM` | hayır | Şifre sıfırlama e-postaları için SMTP sunucusu ve gönderen (`Rota <no-reply@alanadi.com>`). **Yoksa özellik kapalıdır:** `/auth/forgot` 503 verir, arayüz "şifremi unuttum" bağlantısını göstermez |
+| `SMTP_HOST`, `SMTP_FROM` | hayır | Şifre sıfırlama e-postaları için SMTP sunucusu ve gönderen (`Bugünlük <no-reply@alanadi.com>`). **Yoksa özellik kapalıdır:** `/auth/forgot` 503 verir, arayüz "şifremi unuttum" bağlantısını göstermez |
 | `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_SECURITY` | hayır | Varsayılan port `587`, güvenlik `starttls` (`ssl` = 465, `none` = yalnızca yerel test). Hangi sağlayıcı olursa (Gmail uygulama şifresi, Resend, SendGrid, Mailgun) SMTP bilgilerini buraya yaz |
 | `FRONTEND_BASE_URL` | hayır | Varsayılan: `http://localhost:5173`. E-postadaki sıfırlama bağlantısı bununla başlar; yayında frontend'in gerçek adresi olmalı |
 | `PASSWORD_RESET_EXPIRE_MINUTES`, `PASSWORD_RESET_COOLDOWN_SECONDS` | hayır | Varsayılan `60` ve `60`: bağlantının ömrü ve aynı hesaba iki e-posta arasındaki en kısa süre |

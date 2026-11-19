@@ -185,7 +185,7 @@ def _validate_and_enrich_stops(plan: DayPlan, places: list[Place]) -> DayPlan:
 
 
 MIN_ALTERNATIVES = 2
-MAX_ATTEMPTS = 2
+MAX_ATTEMPTS = 3
 
 
 async def create_plan(

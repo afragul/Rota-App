@@ -3,7 +3,7 @@
 // yumuşak bir sınırdır. Gerçek zorlama backend'de JWT doğrulamasıyla yapılmalı.
 export const GUEST_PLAN_LIMIT = 3
 
-const STORAGE_KEY = 'rota-guest-plan-count'
+const STORAGE_KEY = 'bugunluk-guest-plan-count'
 
 export function guestPlanCount(): number {
   try {

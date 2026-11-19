@@ -2,7 +2,7 @@ from fastapi import Response
 
 from app.core.config import get_settings
 
-REFRESH_COOKIE = "rota_refresh"
+REFRESH_COOKIE = "bugunluk_refresh"
 
 
 def set_refresh_cookie(response: Response, raw_token: str) -> None:
