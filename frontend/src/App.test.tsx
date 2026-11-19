@@ -76,7 +76,7 @@ describe('sayfa yenilenince/siteye tekrar girince plan geri yüklenir (planStora
   })
 
   it('bozuk/eski sürüm bir kayıt sessizce yok sayılır, uygulama çökmez ve konum ekranına düşer', async () => {
-    localStorage.setItem('rota.lastPlan', JSON.stringify({ v: 999, garbage: true }))
+    localStorage.setItem('bugunluk.lastPlan', JSON.stringify({ v: 999, garbage: true }))
 
     const { default: App } = await import('./App')
     expect(() => render(<App />)).not.toThrow()
